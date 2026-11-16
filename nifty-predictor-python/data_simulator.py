@@ -304,7 +304,9 @@ class MarketDataSimulator:
                 'ce_oi': ce_oi,
                 'ce_change': random.randint(-50000, 50000),
                 'ce_price': ce_price,
+                'ce_ltp': ce_price,   # alias expected by analysis pipeline
                 'pe_price': pe_price,
+                'pe_ltp': pe_price,   # alias expected by analysis pipeline
                 'pe_oi': pe_oi,
                 'pe_change': random.randint(-50000, 50000),
                 'is_atm': offset == 0

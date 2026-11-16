@@ -558,6 +558,13 @@ function updateFullAnalysis(data) {
 
     }
 
+    // Demo-mode badge (simulated feed — never trade on it)
+    const srcBadge = document.getElementById('dataSource');
+    if (srcBadge && data.demo_mode) {
+        srcBadge.textContent = 'DEMO FEED';
+        srcBadge.style.background = 'var(--warning-color, #f59e0b)';
+    }
+
 
 
     // Update prediction

@@ -508,17 +508,21 @@ class StableMLPredictor:
             if features is None:
                 return {'direction': 'NEUTRAL', 'signal': 'WAIT', 'confidence': 0}
             
-            # Ensure feature dimensions match
-            if features.shape[1] != self.scaler.n_features_in_:
+            # Ensure feature dimensions match (guard: scaler may be unfitted)
+            expected = getattr(self.scaler, 'n_features_in_', features.shape[1])
+            if features.shape[1] != expected:
                 # Pad or truncate features
-                expected = self.scaler.n_features_in_
                 if features.shape[1] < expected:
                     padding = np.zeros((1, expected - features.shape[1]))
                     features = np.hstack([features, padding])
                 else:
                     features = features[:, :expected]
             
-            features_scaled = self.scaler.transform(features)
+            try:
+                features_scaled = self.scaler.transform(features)
+            except Exception:  # scaler not fitted (training failed) — safe neutral
+                return {'direction': 'NEUTRAL', 'signal': 'WAIT', 'confidence': 50,
+                        'bullish_prob': 50, 'bearish_prob': 50, 'reason': 'Model warming up'}
             
             # Get probability from ensemble
             probs = self.model.predict_proba(features_scaled)[0]

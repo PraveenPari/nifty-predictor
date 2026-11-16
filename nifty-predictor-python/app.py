@@ -31,6 +31,33 @@ PORT = int(os.getenv("PORT", "5000"))
 SECRET_KEY = os.getenv("SECRET_KEY") or os.getenv("FLASK_SECRET_KEY") or "dev-only-insecure-key"
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*")
 IS_PROD = os.getenv("FLASK_ENV", "production").lower() == "production"
+# DEMO_MODE=1 serves realistic simulated data (for previews/demos where
+# broker APIs are unreachable). NEVER enable in production trading use.
+DEMO_MODE = os.getenv("DEMO_MODE", "0") == "1"
+
+# Circuit breaker: skip a dead source for N seconds after consecutive failures
+# so one hanging provider can't stall every request.
+_BREAKER_FAILS = {}
+_BREAKER_UNTIL = {}
+_BREAKER_THRESHOLD = 2
+_BREAKER_COOLDOWN = 45  # seconds
+
+
+def _breaker_skip(key: str) -> bool:
+    return time.time() < _BREAKER_UNTIL.get(key, 0)
+
+
+def _breaker_ok(key: str):
+    _BREAKER_FAILS.pop(key, None)
+    _BREAKER_UNTIL.pop(key, None)
+
+
+def _breaker_fail(key: str):
+    n = _BREAKER_FAILS.get(key, 0) + 1
+    _BREAKER_FAILS[key] = n
+    if n >= _BREAKER_THRESHOLD:
+        _BREAKER_UNTIL[key] = time.time() + _BREAKER_COOLDOWN
+        print(f"[BREAKER] '{key}' failing — skipping for {_BREAKER_COOLDOWN}s")
 
 from pro_config.trading_config import INDEX_CONFIG, MARKET_OPEN, MARKET_CLOSE, SIGNAL_CONFIG  # noqa: E402
 
@@ -177,6 +204,15 @@ from accuracy_tracker import accuracy_tracker  # noqa: E402
 from trade_analytics import analyze_recent_trades  # noqa: E402
 from secrets_manager import breeze_login_url, safe_status  # noqa: E402
 
+# Optional: market simulator (powers DEMO_MODE)
+try:
+    from data_simulator import get_simulator  # noqa: E402
+    SIM_AVAILABLE = True
+except Exception as e:
+    SIM_AVAILABLE = False
+    print(f"[BOOT] simulator disabled: {e}")
+    get_simulator = None
+
 # ---------------------------------------------------------------------------
 # Flask app
 # ---------------------------------------------------------------------------
@@ -229,9 +265,47 @@ def _norm_index(index: str) -> str:
     return 'banknifty' if 'bank' in (index or '').lower() else 'nifty'
 
 
+def _demo_price(index: str):
+    sim = get_simulator(index)
+    d = sim.update_tick()
+    d['source'] = 'Demo Simulator'
+    return d
+
+
+def _demo_candles(index: str, count: int = 100):
+    sim = get_simulator(index)
+    sim.update_tick()
+    return sim.get_candles('5m', count)
+
+
+def _demo_option_chain(index: str):
+    sim = get_simulator(index)
+    px = sim.get_current_price()['ltp']
+    return {
+        'underlying': px,
+        'expiry': 'DEMO',
+        'chain': sim.get_option_chain(),
+        'source': 'Demo Simulator',
+    }
+
+
+def _demo_vix():
+    s = get_simulator('nifty').get_market_sentiment()
+    return {'ltp': s['vix'], 'change': s.get('vix_change', 0), 'source': 'Demo Simulator'}
+
+
+def _demo_sentiment_extra():
+    return get_simulator('nifty').get_market_sentiment()
+
+
 def get_live_price_hybrid(index: str):
-    """Live price: Breeze -> Angel One -> Yahoo."""
+    """Live price: Breeze -> Angel One -> Yahoo (or Demo Simulator in DEMO_MODE)."""
     index = _norm_index(index)
+    if DEMO_MODE and SIM_AVAILABLE:
+        try:
+            return _demo_price(index)
+        except Exception as e:
+            print(f"[DEMO] price failed: {e}")
     if BREEZE_AVAILABLE and breeze_manager.is_connected():
         data = breeze_manager.get_live_price(index)
         if data:
@@ -240,22 +314,35 @@ def get_live_price_hybrid(index: str):
         data = angel_one_enhanced.get_ltp(index)
         if data:
             return data
-    if YAHOO_AVAILABLE:
-        return yahoo_manager.get_live_price(index)
+    if YAHOO_AVAILABLE and not _breaker_skip('yahoo_price'):
+        data = yahoo_manager.get_live_price(index)
+        if data:
+            _breaker_ok('yahoo_price')
+            return data
+        _breaker_fail('yahoo_price')
     return None
 
 
 def get_candles_hybrid(index: str, tf: str = '5m', days: int = 5):
-    """Candles: Breeze -> Angel One -> Yahoo."""
+    """Candles: Breeze -> Angel One -> Yahoo (or Demo Simulator in DEMO_MODE)."""
     index = _norm_index(index)
+    if DEMO_MODE and SIM_AVAILABLE:
+        try:
+            return _demo_candles(index)
+        except Exception as e:
+            print(f"[DEMO] candles failed: {e}")
     candles = None
     if BREEZE_AVAILABLE and breeze_manager.is_connected():
         candles = breeze_manager.get_historical_data(index, _BREEZE_TF.get(tf, '5minute'), days)
     if (not candles or len(candles) < 5) and ANGEL_AVAILABLE and angel_one_enhanced.is_logged_in:
         tf_map = {'5m': 'FIVE_MINUTE', '15m': 'FIFTEEN_MINUTE', '1h': 'ONE_HOUR', '1d': 'ONE_DAY'}
         candles = angel_one_enhanced.get_candles(index, tf_map.get(tf, 'FIVE_MINUTE'), days=days)
-    if (not candles or len(candles) < 5) and YAHOO_AVAILABLE:
+    if (not candles or len(candles) < 5) and YAHOO_AVAILABLE and not _breaker_skip('yahoo_candles'):
         candles = yahoo_manager.get_candles(index, tf, _YAHOO_PERIOD.get(tf, '5d'))
+        if candles and len(candles) >= 5:
+            _breaker_ok('yahoo_candles')
+        else:
+            _breaker_fail('yahoo_candles')
     return candles or []
 
 
@@ -268,6 +355,11 @@ def get_option_chain_hybrid(index: str):
             return False
         return any(r.get('ce_ltp', 0) > 0 or r.get('pe_ltp', 0) > 0 for r in oc['chain'])
 
+    if DEMO_MODE and SIM_AVAILABLE:
+        try:
+            return _demo_option_chain(index)
+        except Exception as e:
+            print(f"[DEMO] option chain failed: {e}")
     if BREEZE_AVAILABLE and breeze_manager.is_connected():
         oc = breeze_manager.get_option_chain(index)
         if oc and oc.get('chain') and has_valid_premiums(oc):
@@ -291,12 +383,21 @@ def get_option_chain_hybrid(index: str):
 
 
 def get_vix_hybrid():
-    if BREEZE_AVAILABLE:
+    if DEMO_MODE and SIM_AVAILABLE:
+        try:
+            return _demo_vix()
+        except Exception as e:
+            print(f"[DEMO] vix failed: {e}")
+    if BREEZE_AVAILABLE and breeze_manager.is_connected():
         vix_data = breeze_manager.get_vix()
         if vix_data and vix_data.get('ltp'):
             return vix_data
-    if YAHOO_AVAILABLE:
-        return yahoo_manager.get_vix()
+    if YAHOO_AVAILABLE and not _breaker_skip('yahoo_vix'):
+        vix_data = yahoo_manager.get_vix()
+        if vix_data and vix_data.get('ltp'):
+            _breaker_ok('yahoo_vix')
+            return vix_data
+        _breaker_fail('yahoo_vix')
     return {'ltp': 14, 'source': 'default'}
 
 
@@ -340,7 +441,10 @@ def get_market_analysis(index='nifty'):
             if total_ce_oi > 0:
                 pcr = round(total_pe_oi / total_ce_oi, 2)
 
-        fii_dii_data = yahoo_manager.get_fii_dii() if YAHOO_AVAILABLE else {}
+        if DEMO_MODE and SIM_AVAILABLE:
+            fii_dii_data = _demo_sentiment_extra()
+        else:
+            fii_dii_data = yahoo_manager.get_fii_dii() if YAHOO_AVAILABLE else {}
 
         sentiment = {
             'overall_sentiment': 'NEUTRAL',
@@ -406,6 +510,7 @@ def get_market_analysis(index='nifty'):
 
         return {
             'index': index,
+            'demo_mode': DEMO_MODE,
             'price_data': price_data,
             'indicators': indicators,
             'strategies': strategies,
@@ -488,6 +593,7 @@ def status():
         'breeze_connected': bool(BREEZE_AVAILABLE and breeze_manager.is_connected()),
         'breeze_configured': breeze.get('fully_configured', False),
         'market_open': is_market_open(),
+        'demo_mode': DEMO_MODE,
         'yahoo_available': YAHOO_AVAILABLE,
         'ml_available': ML_AVAILABLE and STABLE_ML_AVAILABLE,
         'ml_trained': ml_stats.get('is_trained', False),
@@ -707,6 +813,10 @@ def breeze_auth():
 
 @app.route('/api/top-stocks/short-term')
 def top_stocks_short_term():
+    if DEMO_MODE:
+        return jsonify({'picks': [], 'count': 0, 'type': 'short_term',
+                        'demo_mode': True, 'message': 'Stock picks disabled in demo mode',
+                        'timestamp': datetime.now().isoformat()})
     if not STOCKS_AVAILABLE:
         return jsonify({'error': 'STOCKS_UNAVAILABLE'}), 503
     count = min(20, max(1, int(request.args.get('count', 10))))
@@ -722,6 +832,10 @@ def top_stocks_short_term():
 
 @app.route('/api/top-stocks/long-term')
 def top_stocks_long_term():
+    if DEMO_MODE:
+        return jsonify({'picks': [], 'count': 0, 'type': 'long_term',
+                        'demo_mode': True, 'message': 'Stock picks disabled in demo mode',
+                        'timestamp': datetime.now().isoformat()})
     if not STOCKS_AVAILABLE:
         return jsonify({'error': 'STOCKS_UNAVAILABLE'}), 503
     count = min(20, max(1, int(request.args.get('count', 10))))
@@ -751,6 +865,10 @@ def all_stocks_analysis():
 
 @app.route('/api/market-movers')
 def market_movers():
+    if DEMO_MODE:
+        return jsonify({'gainers': [], 'losers': [], 'demo_mode': True,
+                        'message': 'Market movers disabled in demo mode',
+                        'timestamp': datetime.now().isoformat()})
     return jsonify(get_market_movers())
 
 
