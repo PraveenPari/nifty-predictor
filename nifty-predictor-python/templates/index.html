@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Advanced Nifty & Bank Nifty Real-Time Market Prediction with ML">
+    <title>Nifty Predictor Pro | AI-Powered Trading Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+        rel="stylesheet">
+    <script src="/static/js/lightweight-charts.standalone.production.js?v=debug1"></script>
+    <script src="/static/js/socket.io.min.js?v=debug1"></script>
+    <link rel="stylesheet" href="/static/styles.css">
+    <style>
+        @keyframes pulse {
+            0%   { opacity: 1; transform: scale(1); }
+            50%  { opacity: 0.4; transform: scale(1.3); }
+            100% { opacity: 1; transform: scale(1); }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="header">
+            <div class="logo-section">
+                <div class="logo-icon">⚡</div>
+                <span class="logo-text">NIFTY<span class="highlight">PRO</span></span>
+                <span class="version-badge">Python ML v2.0</span>
+            </div>
+
+            <div class="market-ticker">
+                <div class="ticker-item">
+                    <span class="ticker-label">NIFTY</span>
+                    <span class="ticker-value" id="niftyPrice">Loading...</span>
+                    <span class="ticker-change" id="niftyChange">--</span>
+                </div>
+                <div class="ticker-divisor"></div>
+                <div class="ticker-item">
+                    <span class="ticker-label">BANKNIFTY</span>
+                    <span class="ticker-value" id="bankniftyPrice">Loading...</span>
+                    <span class="ticker-change" id="bankniftyChange">--</span>
+                </div>
+            </div>
+
+            <div class="header-controls">
+                <div class="status-indicator" id="marketStatus">
+                    <span class="dot"></span>
+                    <span class="text">Connecting...</span>
+                </div>
+                <div class="data-source-badge" id="dataSource">ML LIVE</div>
+            </div>
+        </header>
+
+        <!-- Main Dashboard -->
+        <main class="dashboard-grid">
+            <!-- LEFT PANEL -->
+            <aside class="left-panel">
+                <!-- AI Prediction Box -->
+                <div class="panel-card prediction-box">
+                    <div class="panel-head">
+                        <h3>🤖 AI PREDICTION</h3>
+                        <span class="live-badge">ML LIVE</span>
+                    </div>
+                    <div class="gauge-wrapper">
+                        <div class="prediction-gauge">
+                            <div class="gauge-value-display" id="gaugeValue">--%</div>
+                            <div class="gauge-label-display" id="gaugeLabel">ANALYZING</div>
+                        </div>
+                    </div>
+                    <div class="signal-row">
+                        <div class="signal-box call" id="ceSignalBox">
+                            <span class="sig-label">CALL (CE)</span>
+                            <span class="sig-value" id="ceProb">--%</span>
+                        </div>
+                        <div class="signal-box put" id="peSignalBox">
+                            <span class="sig-label">PUT (PE)</span>
+                            <span class="sig-value" id="peProb">--%</span>
+                        </div>
+                    </div>
+                    <div class="ml-info" id="mlInfo">
+                        <div class="ml-row">
+                            <span>Model Agreement:</span>
+                            <span id="modelAgreement">--</span>
+                        </div>
+                        <div class="ml-row">
+                            <span>Confidence:</span>
+                            <span id="confidence">--</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Trade Recommendations -->
+                <div class="panel-card trade-suggestions-box" id="tradeSuggestionsPanel">
+                    <div class="trade-signal neutral">
+                        <h4>WAITING FOR SIGNAL...</h4>
+                        <div class="trade-details">
+                            <p style="color: var(--text-secondary); text-align: center;">
+                                Analyzing market data...
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Key Levels -->
+                <div class="panel-card key-levels">
+                    <div class="panel-head">
+                        <h3>📍 KEY LEVELS</h3>
+                    </div>
+                    <div class="level-group">
+                        <label class="res">Resistance</label>
+                        <div id="resistanceLevels" class="level-list">--</div>
+                    </div>
+                    <div class="current-level-wrapper">
+                        <div class="cmp-label">LTP</div>
+                        <div id="currentPrice" class="cmp-main">--</div>
+                    </div>
+                    <div class="level-group">
+                        <label class="sup">Support</label>
+                        <div id="supportLevels" class="level-list">--</div>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- CENTER PANEL: Stock Picks & Analysis -->
+            <section class="center-panel">
+                <!-- Chart Tools -->
+                <div class="chart-toolbar">
+                    <div class="symbol-selector">
+                        <button class="sym-btn active" onclick="selectIndex('nifty')">NIFTY</button>
+                        <button class="sym-btn" onclick="selectIndex('banknifty')">BANKNIFTY</button>
+                    </div>
+                    <div class="tf-selector">
+                        <button class="tf-btn active" onclick="changeTimeframe('5m')">5m</button>
+                        <button class="tf-btn" onclick="changeTimeframe('15m')">15m</button>
+                        <button class="tf-btn" onclick="changeTimeframe('1h')">1h</button>
+                        <button class="tf-btn" onclick="changeTimeframe('1d')">1d</button>
+                    </div>
+                    <div class="chart-type-selector">
+                        <button class="chart-btn active" onclick="setChartType('candle')">🕯️ Candle</button>
+                        <button class="chart-btn" onclick="setChartType('line')">📈 Line</button>
+                    </div>
+                    <div class="refresh-controls">
+                        <button class="refresh-btn" onclick="refreshStockPicks()">🔄 Refresh Picks</button>
+                        <span class="last-update" id="lastUpdate">Updated: --</span>
+                    </div>
+                </div>
+
+                <!-- Main Chart -->
+                <div class="main-chart-area" style="position: relative; height: 380px; width: 100%; margin-bottom: 1.25rem;">
+                    <div id="tvChartContainer" style="width: 100%; height: 100%;"></div>
+                </div>
+
+                <!-- ================= NIFTY RECENT TRADES ================= -->
+                <div class="panel-card recent-trades-card" style="margin-bottom: 1.25rem;">
+                    <div class="panel-head" style="display: flex; justify-content: space-between; align-items: center;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <h3>?? NIFTY 50 - RECENT TRADES & SUCCESS RATE</h3>
+                            <span class="live-badge" style="background: rgba(16, 185, 129, 0.2); color: var(--up-color); font-size: 0.72rem; padding: 2px 8px; border-radius: 4px; font-weight: 600;">LIVE (1 LOT = 25 QTY)</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <label style="font-size: 0.8rem; color: var(--text-secondary);">Window:</label>
+                            <select id="niftyTradesHours" onchange="loadNiftyTrades()" style="background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 6px; padding: 4px 8px; font-size: 0.82rem; cursor: pointer;">
+                                <option value="2">Last 2 Hours</option>
+                                <option value="4" selected>Last 4 Hours</option>
+                                <option value="6">Today (Full Session)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Nifty Summary Stats Bar -->
+                    <div class="trades-summary-bar" style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; padding: 12px; background: rgba(0,0,0,0.25); border-radius: 8px; margin: 10px 0;">
+                        <div class="metric-card" style="text-align: center;">
+                            <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 4px;">WIN RATE</div>
+                            <div id="niftyWinRate" style="font-size: 1.4rem; font-weight: 700; color: var(--up-color);">--%</div>
+                        </div>
+                        <div class="metric-card" style="text-align: center;">
+                            <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 4px;">TRADES (W+L)</div>
+                            <div id="niftyTotalTrades" style="font-size: 1.4rem; font-weight: 700; color: var(--text-primary);">--</div>
+                        </div>
+                        <div class="metric-card" style="text-align: center;">
+                            <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 4px;">WINS / LOSSES</div>
+                            <div id="niftyWinsLosses" style="font-size: 1.4rem; font-weight: 700; color: var(--text-secondary);">-- / --</div>
+                        </div>
+                        <div class="metric-card" style="text-align: center;">
+                            <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 4px;">NET POINTS</div>
+                            <div id="niftyNetPoints" style="font-size: 1.4rem; font-weight: 700; color: var(--up-color);">-- pts</div>
+                        </div>
+                        <div class="metric-card" style="text-align: center;">
+                            <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 4px;">EST. P&L (1 LOT)</div>
+                            <div id="niftyNetPnl" style="font-size: 1.4rem; font-weight: 700; color: var(--up-color);">?--</div>
+                        </div>
+                        <div class="metric-card" style="text-align: center;">
+                            <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 4px;">CURRENT STREAK</div>
+                            <div id="niftyStreak" style="font-size: 1.2rem; font-weight: 700; color: var(--accent-cyan);">--</div>
+                        </div>
+                    </div>
+
+                    <!-- Nifty Trades Table -->
+                    <div style="overflow-x: auto; max-height: 260px; overflow-y: auto;">
+                        <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem; text-align: left;">
+                            <thead>
+                                <tr style="border-bottom: 1px solid var(--border-color); color: var(--text-secondary); background: rgba(255,255,255,0.02);">
+                                    <th style="padding: 8px 10px;">Time</th>
+                                    <th style="padding: 8px 10px;">Trade Action</th>
+                                    <th style="padding: 8px 10px;">Entry</th>
+                                    <th style="padding: 8px 10px;">Target</th>
+                                    <th style="padding: 8px 10px;">Stop Loss</th>
+                                    <th style="padding: 8px 10px;">Exit / LTP</th>
+                                    <th style="padding: 8px 10px;">Points</th>
+                                    <th style="padding: 8px 10px;">P&L (?)</th>
+                                    <th style="padding: 8px 10px; text-align: center;">Status</th>
+                                    <th style="padding: 8px 10px;">Trigger Reason</th>
+                                </tr>
+                            </thead>
+                            <tbody id="niftyTradesBody">
+                                <tr><td colspan="10" style="text-align: center; padding: 20px; color: var(--text-muted);">Loading NIFTY trades...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- ================= BANKNIFTY RECENT TRADES ================= -->
+                <div class="panel-card recent-trades-card" style="margin-bottom: 1.25rem;">
+                    <div class="panel-head" style="display: flex; justify-content: space-between; align-items: center;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <h3>?? BANK NIFTY - RECENT TRADES & SUCCESS RATE</h3>
+                            <span class="live-badge" style="background: rgba(59, 130, 246, 0.2); color: var(--accent-blue); font-size: 0.72rem; padding: 2px 8px; border-radius: 4px; font-weight: 600;">LIVE (1 LOT = 15 QTY)</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <label style="font-size: 0.8rem; color: var(--text-secondary);">Window:</label>
+                            <select id="bankniftyTradesHours" onchange="loadBankniftyTrades()" style="background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 6px; padding: 4px 8px; font-size: 0.82rem; cursor: pointer;">
+                                <option value="2">Last 2 Hours</option>
+                                <option value="4" selected>Last 4 Hours</option>
+                                <option value="6">Today (Full Session)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- BankNifty Summary Stats Bar -->
+                    <div class="trades-summary-bar" style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; padding: 12px; background: rgba(0,0,0,0.25); border-radius: 8px; margin: 10px 0;">
+                        <div class="metric-card" style="text-align: center;">
+                            <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 4px;">WIN RATE</div>
+                            <div id="bnWinRate" style="font-size: 1.4rem; font-weight: 700; color: var(--up-color);">--%</div>
+                        </div>
+                        <div class="metric-card" style="text-align: center;">
+                            <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 4px;">TRADES (W+L)</div>
+                            <div id="bnTotalTrades" style="font-size: 1.4rem; font-weight: 700; color: var(--text-primary);">--</div>
+                        </div>
+                        <div class="metric-card" style="text-align: center;">
+                            <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 4px;">WINS / LOSSES</div>
+                            <div id="bnWinsLosses" style="font-size: 1.4rem; font-weight: 700; color: var(--text-secondary);">-- / --</div>
+                        </div>
+                        <div class="metric-card" style="text-align: center;">
+                            <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 4px;">NET POINTS</div>
+                            <div id="bnNetPoints" style="font-size: 1.4rem; font-weight: 700; color: var(--up-color);">-- pts</div>
+                        </div>
+                        <div class="metric-card" style="text-align: center;">
+                            <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 4px;">EST. P&L (1 LOT)</div>
+                            <div id="bnNetPnl" style="font-size: 1.4rem; font-weight: 700; color: var(--up-color);">?--</div>
+                        </div>
+                        <div class="metric-card" style="text-align: center;">
+                            <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 4px;">CURRENT STREAK</div>
+                            <div id="bnStreak" style="font-size: 1.2rem; font-weight: 700; color: var(--accent-cyan);">--</div>
+                        </div>
+                    </div>
+
+                    <!-- BankNifty Trades Table -->
+                    <div style="overflow-x: auto; max-height: 260px; overflow-y: auto;">
+                        <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem; text-align: left;">
+                            <thead>
+                                <tr style="border-bottom: 1px solid var(--border-color); color: var(--text-secondary); background: rgba(255,255,255,0.02);">
+                                    <th style="padding: 8px 10px;">Time</th>
+                                    <th style="padding: 8px 10px;">Trade Action</th>
+                                    <th style="padding: 8px 10px;">Entry</th>
+                                    <th style="padding: 8px 10px;">Target</th>
+                                    <th style="padding: 8px 10px;">Stop Loss</th>
+                                    <th style="padding: 8px 10px;">Exit / LTP</th>
+                                    <th style="padding: 8px 10px;">Points</th>
+                                    <th style="padding: 8px 10px;">P&L (?)</th>
+                                    <th style="padding: 8px 10px; text-align: center;">Status</th>
+                                    <th style="padding: 8px 10px;">Trigger Reason</th>
+                                </tr>
+                            </thead>
+                            <tbody id="bankniftyTradesBody">
+                                <tr><td colspan="10" style="text-align: center; padding: 20px; color: var(--text-muted);">Loading BANKNIFTY trades...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Stock Picks Section -->
+                <div class="stock-picks-container">
+                    <!-- Short-Term Picks -->
+                    <div class="panel-card stock-picks-card">
+                        <div class="panel-head">
+                            <h3>🚀 SHORT-TERM PICKS (15 Min)</h3>
+                            <span class="picks-badge" id="shortTermCount">0 Stocks</span>
+                        </div>
+                        <div class="picks-description">Top stocks for quick intraday trades based on momentum & RSI</div>
+                        <div class="stock-picks-list" id="shortTermPicks">
+                            <div class="loading-picks">Analyzing 50+ stocks...</div>
+                        </div>
+                    </div>
+
+                    <!-- Long-Term Picks -->
+                    <div class="panel-card stock-picks-card">
+                        <div class="panel-head">
+                            <h3>💎 INVESTMENT PICKS</h3>
+                            <span class="picks-badge" id="longTermCount">0 Stocks</span>
+                        </div>
+                        <div class="picks-description">Top stocks for investment based on trend & technical strength</div>
+                        <div class="stock-picks-list" id="longTermPicks">
+                            <div class="loading-picks">Analyzing 50+ stocks...</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Market Movers from MoneyControl -->
+                <div class="market-movers-section">
+                    <div class="panel-card movers-card">
+                        <div class="panel-head">
+                            <h3>📈 TOP GAINERS</h3>
+                            <span class="source-badge">MoneyControl</span>
+                        </div>
+                        <div class="movers-list" id="topGainers">
+                            <div class="loading-picks">Loading...</div>
+                        </div>
+                    </div>
+                    <div class="panel-card movers-card">
+                        <div class="panel-head">
+                            <h3>📉 TOP LOSERS</h3>
+                            <span class="source-badge">MoneyControl</span>
+                        </div>
+                        <div class="movers-list" id="topLosers">
+                            <div class="loading-picks">Loading...</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Strategy Tabs -->
+                <div class="strategy-tabs-container">
+                    <div class="strategy-tabs" id="strategyTabs">
+                        <button class="strat-tab active" data-category="all" onclick="filterStrategies('all')">All
+                            Strategies</button>
+                        <button class="strat-tab" data-category="momentum" onclick="filterStrategies('momentum')">📊
+                            Momentum</button>
+                        <button class="strat-tab" data-category="trend" onclick="filterStrategies('trend')">📈
+                            Trend</button>
+                        <button class="strat-tab" data-category="volatility" onclick="filterStrategies('volatility')">🌊
+                            Volatility</button>
+                        <button class="strat-tab" data-category="volume" onclick="filterStrategies('volume')">📦
+                            Volume</button>
+                        <button class="strat-tab" data-category="sentiment" onclick="filterStrategies('sentiment')">💭
+                            Sentiment</button>
+                    </div>
+                    <div class="strategies-grid" id="strategiesGrid">
+                        <!-- Strategies will be populated here -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- RIGHT PANEL -->
+            <aside class="right-panel">
+                <!-- Option Chain -->
+                <div class="panel-card option-chain">
+                    <div class="panel-head">
+                        <h3>📋 OPTION CHAIN</h3>
+                        <span class="expiry-date" id="expiryDisplay">EXPIRY: --</span>
+                    </div>
+                    <div class="oc-table-header">
+                        <div class="col-oi">CE OI</div>
+                        <div class="col-strike">STRIKE</div>
+                        <div class="col-oi">PE OI</div>
+                    </div>
+                    <div class="oc-scroll-container">
+                        <div class="option-chain-list" id="optionChainBody">
+                            <div class="oc-row">Loading...</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ML Model Stats -->
+                <div class="panel-card ml-stats">
+                    <div class="panel-head">
+                        <h3>🧠 ML MODEL</h3>
+                        <button class="train-btn" onclick="trainModel()">Retrain</button>
+                    </div>
+                    <div id="mlStats">
+                        <div class="ml-stat-row">
+                            <span>Status:</span>
+                            <span class="ml-status" id="mlStatus">Initializing...</span>
+                        </div>
+                        <div class="ml-stat-row">
+                            <span>RF Prediction:</span>
+                            <span id="rfPrediction">--</span>
+                        </div>
+                        <div class="ml-stat-row">
+                            <span>GB Prediction:</span>
+                            <span id="gbPrediction">--</span>
+                        </div>
+                    </div>
+                    </div>
+                    <div class="top-features" id="topFeatures">
+                        <h4>Top Features</h4>
+                        <div id="featuresList"></div>
+                    </div>
+                </div>
+
+                <!-- Accuracy Tracker -->
+                <div class="panel-card accuracy-stats">
+                    <div class="panel-head">
+                        <h3>🎯 ACCURACY TRACKER</h3>
+                    </div>
+                    <div class="accuracy-grid" style="padding: 10px;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                            <span style="color: var(--text-secondary);">Win Rate:</span>
+                            <span id="accWinRate" style="font-weight: bold; color: var(--up-color);">--%</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                            <span style="color: var(--text-secondary);">Validated:</span>
+                            <span id="accValidated" style="font-weight: bold;">--</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                            <span style="color: var(--text-secondary);">Wins / Losses:</span>
+                            <span id="accWinsLosses" style="font-weight: bold;">-- / --</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Market Sentiment -->
+                <div class="panel-card sentiment-box">
+                    <div class="panel-head">
+                        <h3>📊 SENTIMENT</h3>
+                    </div>
+                    <div class="sentiment-grid" id="sentimentGrid">
+                        <div class="sent-item">
+                            <span class="sent-label">VIX</span>
+                            <span class="sent-value" id="vixValue">--</span>
+                        </div>
+                        <div class="sent-item">
+                            <span class="sent-label">PCR</span>
+                            <span class="sent-value" id="pcrValue">--</span>
+                        </div>
+                        <div class="sent-item">
+                            <span class="sent-label">FII Net</span>
+                            <span class="sent-value" id="fiiValue">--</span>
+                        </div>
+                        <div class="sent-item">
+                            <span class="sent-label">DII Net</span>
+                            <span class="sent-value" id="diiValue">--</span>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+        </main>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>© 2024 Nifty Predictor Pro | Python ML-Powered Trading Dashboard</p>
+            <p class="disclaimer">⚠️ Trading involves risk. This tool is for educational purposes only.</p>
+        </footer>
+    </div>
+
+    <!-- Strategy Detail Modal -->
+    <div class="modal" id="strategyModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modalTitle">Strategy Details</h3>
+                <button class="modal-close" onclick="closeModal()">&times;</button>
+            </div>
+            <div class="modal-body" id="modalBody">
+                <div class="strategy-detail">
+                    <div class="detail-row">
+                        <span class="label">Signal:</span>
+                        <span class="value" id="modalSignal">--</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="label">Strength:</span>
+                        <span class="value" id="modalStrength">--</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="label">Reason:</span>
+                        <span class="value" id="modalReason">--</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- Trade Detail Modal -->
+    <div id="tradeDetailModal" style="display:none; position:fixed; z-index:99999; left:0; top:0; width:100%; height:100%; background:rgba(0,0,0,0.75); backdrop-filter:blur(4px); align-items:center; justify-content:center;">
+        <div style="background:#131722; border:1px solid #2a2e39; border-radius:12px; width:92%; max-width:620px; box-shadow:0 20px 40px rgba(0,0,0,0.6); overflow:hidden; animation:modalIn 0.2s ease;">
+            <!-- Modal Header -->
+            <div style="display:flex; justify-content:space-between; align-items:center; padding:16px 20px; border-bottom:1px solid #2a2e39; background:rgba(255,255,255,0.02);">
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <span id="mdlActionBadge" style="font-size:0.95rem; font-weight:700; padding:4px 10px; border-radius:6px; background:#10b981; color:#fff;">BUY</span>
+                    <h3 id="mdlTitle" style="margin:0; font-size:1.15rem; color:#fff; font-weight:700;">Trade Details</h3>
+                </div>
+                <button onclick="closeTradeModal()" style="background:none; border:none; color:#888; font-size:1.5rem; cursor:pointer; line-height:1; padding:0 4px;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='#888'">&times;</button>
+            </div>
+
+            <!-- Modal Content Body -->
+            <div id="mdlBody" style="padding:20px; max-height:80vh; overflow-y:auto; font-size:0.88rem; color:#d1d4dc;">
+                <!-- Populated dynamically via JS -->
+            </div>
+
+            <!-- Modal Footer -->
+            <div style="padding:12px 20px; border-top:1px solid #2a2e39; text-align:right; background:rgba(255,255,255,0.01);">
+                <button onclick="closeTradeModal()" style="background:#2a2e39; color:#fff; border:none; padding:7px 18px; border-radius:6px; cursor:pointer; font-weight:600; font-size:0.85rem;" onmouseover="this.style.background='#363a45'" onmouseout="this.style.background='#2a2e39'">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/app.js?v=1793341349"></script>
+</body>
+
+</html>

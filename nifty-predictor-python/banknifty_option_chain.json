@@ -1,0 +1,200 @@
+{
+  "index": "banknifty",
+  "spot_price": 59200.1,
+  "atm_strike": 59200,
+  "expiry": "29JAN26",
+  "chain": [
+    {
+      "strike": 58700,
+      "ce_symbol": "BANKNIFTY29JAN2658700CE",
+      "ce_ltp": 0,
+      "ce_oi": 0,
+      "pe_symbol": "BANKNIFTY29JAN2658700PE",
+      "pe_ltp": 0,
+      "pe_oi": 0
+    },
+    {
+      "strike": 58750,
+      "ce_symbol": "BANKNIFTY29JAN2658750CE",
+      "ce_ltp": 0,
+      "ce_oi": 0,
+      "pe_symbol": "BANKNIFTY29JAN2658750PE",
+      "pe_ltp": 0,
+      "pe_oi": 0
+    },
+    {
+      "strike": 58800,
+      "ce_symbol": "BANKNIFTY29JAN2658800CE",
+      "ce_ltp": 0,
+      "ce_oi": 0,
+      "pe_symbol": "BANKNIFTY29JAN2658800PE",
+      "pe_ltp": 0,
+      "pe_oi": 0
+    },
+    {
+      "strike": 58850,
+      "ce_symbol": "BANKNIFTY29JAN2658850CE",
+      "ce_ltp": 0,
+      "ce_oi": 0,
+      "pe_symbol": "BANKNIFTY29JAN2658850PE",
+      "pe_ltp": 0,
+      "pe_oi": 0
+    },
+    {
+      "strike": 58900,
+      "ce_symbol": "BANKNIFTY29JAN2658900CE",
+      "ce_ltp": 0,
+      "ce_oi": 0,
+      "pe_symbol": "BANKNIFTY29JAN2658900PE",
+      "pe_ltp": 0,
+      "pe_oi": 0
+    },
+    {
+      "strike": 58950,
+      "ce_symbol": "BANKNIFTY29JAN2658950CE",
+      "ce_ltp": 0,
+      "ce_oi": 0,
+      "pe_symbol": "BANKNIFTY29JAN2658950PE",
+      "pe_ltp": 0,
+      "pe_oi": 0
+    },
+    {
+      "strike": 59000,
+      "ce_symbol": "BANKNIFTY29JAN2659000CE",
+      "ce_ltp": 0,
+      "ce_oi": 0,
+      "pe_symbol": "BANKNIFTY29JAN2659000PE",
+      "pe_ltp": 0,
+      "pe_oi": 0
+    },
+    {
+      "strike": 59050,
+      "ce_symbol": "BANKNIFTY29JAN2659050CE",
+      "ce_ltp": 0,
+      "ce_oi": 0,
+      "pe_symbol": "BANKNIFTY29JAN2659050PE",
+      "pe_ltp": 0,
+      "pe_oi": 0
+    },
+    {
+      "strike": 59100,
+      "ce_symbol": "BANKNIFTY29JAN2659100CE",
+      "ce_ltp": 0,
+      "ce_oi": 0,
+      "pe_symbol": "BANKNIFTY29JAN2659100PE",
+      "pe_ltp": 0,
+      "pe_oi": 0
+    },
+    {
+      "strike": 59150,
+      "ce_symbol": "BANKNIFTY29JAN2659150CE",
+      "ce_ltp": 0,
+      "ce_oi": 0,
+      "pe_symbol": "BANKNIFTY29JAN2659150PE",
+      "pe_ltp": 0,
+      "pe_oi": 0
+    },
+    {
+      "strike": 59200,
+      "ce_symbol": "BANKNIFTY29JAN2659200CE",
+      "ce_ltp": 0,
+      "ce_oi": 0,
+      "pe_symbol": "BANKNIFTY29JAN2659200PE",
+      "pe_ltp": 0,
+      "pe_oi": 0
+    },
+    {
+      "strike": 59250,
+      "ce_symbol": "BANKNIFTY29JAN2659250CE",
+      "ce_ltp": 0,
+      "ce_oi": 0,
+      "pe_symbol": "BANKNIFTY29JAN2659250PE",
+      "pe_ltp": 0,
+      "pe_oi": 0
+    },
+    {
+      "strike": 59300,
+      "ce_symbol": "BANKNIFTY29JAN2659300CE",
+      "ce_ltp": 0,
+      "ce_oi": 0,
+      "pe_symbol": "BANKNIFTY29JAN2659300PE",
+      "pe_ltp": 0,
+      "pe_oi": 0
+    },
+    {
+      "strike": 59350,
+      "ce_symbol": "BANKNIFTY29JAN2659350CE",
+      "ce_ltp": 0,
+      "ce_oi": 0,
+      "pe_symbol": "BANKNIFTY29JAN2659350PE",
+      "pe_ltp": 0,
+      "pe_oi": 0
+    },
+    {
+      "strike": 59400,
+      "ce_symbol": "BANKNIFTY29JAN2659400CE",
+      "ce_ltp": 0,
+      "ce_oi": 0,
+      "pe_symbol": "BANKNIFTY29JAN2659400PE",
+      "pe_ltp": 0,
+      "pe_oi": 0
+    },
+    {
+      "strike": 59450,
+      "ce_symbol": "BANKNIFTY29JAN2659450CE",
+      "ce_ltp": 0,
+      "ce_oi": 0,
+      "pe_symbol": "BANKNIFTY29JAN2659450PE",
+      "pe_ltp": 0,
+      "pe_oi": 0
+    },
+    {
+      "strike": 59500,
+      "ce_symbol": "BANKNIFTY29JAN2659500CE",
+      "ce_ltp": 0,
+      "ce_oi": 0,
+      "pe_symbol": "BANKNIFTY29JAN2659500PE",
+      "pe_ltp": 0,
+      "pe_oi": 0
+    },
+    {
+      "strike": 59550,
+      "ce_symbol": "BANKNIFTY29JAN2659550CE",
+      "ce_ltp": 0,
+      "ce_oi": 0,
+      "pe_symbol": "BANKNIFTY29JAN2659550PE",
+      "pe_ltp": 0,
+      "pe_oi": 0
+    },
+    {
+      "strike": 59600,
+      "ce_symbol": "BANKNIFTY29JAN2659600CE",
+      "ce_ltp": 0,
+      "ce_oi": 0,
+      "pe_symbol": "BANKNIFTY29JAN2659600PE",
+      "pe_ltp": 0,
+      "pe_oi": 0
+    },
+    {
+      "strike": 59650,
+      "ce_symbol": "BANKNIFTY29JAN2659650CE",
+      "ce_ltp": 0,
+      "ce_oi": 0,
+      "pe_symbol": "BANKNIFTY29JAN2659650PE",
+      "pe_ltp": 0,
+      "pe_oi": 0
+    },
+    {
+      "strike": 59700,
+      "ce_symbol": "BANKNIFTY29JAN2659700CE",
+      "ce_ltp": 0,
+      "ce_oi": 0,
+      "pe_symbol": "BANKNIFTY29JAN2659700PE",
+      "pe_ltp": 0,
+      "pe_oi": 0
+    }
+  ],
+  "timestamp": "2026-01-22T16:43:40.378649",
+  "source": "angel_one_optimized",
+  "strikes_count": 21
+}

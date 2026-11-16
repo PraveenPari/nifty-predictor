@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Advanced Nifty & Bank Nifty Real-Time Market Prediction Tool">
+    <title>Nifty Predictor Pro | Real-Time Market Analysis</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+        rel="stylesheet">
+    <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <div class="app-container pro-dashboard">
+        <!-- Top Navigation Bar -->
+        <header class="pro-header">
+            <div class="logo-section">
+                <div class="logo-icon">⚡</div>
+                <span class="logo-text">NIFTY<span class="highlight">PRO</span></span>
+            </div>
+
+            <div class="market-ticker">
+                <div class="ticker-item">
+                    <span class="ticker-label">NIFTY</span>
+                    <span class="ticker-value" id="niftyPrice">Loading...</span>
+                    <span class="ticker-change" id="niftyChange">--</span>
+                </div>
+                <div class="ticker-divisor"></div>
+                <div class="ticker-item">
+                    <span class="ticker-label">BANKNIFTY</span>
+                    <span class="ticker-value" id="bankniftyPrice">Loading...</span>
+                    <span class="ticker-change" id="bankniftyChange">--</span>
+                </div>
+            </div>
+
+            <div class="header-controls">
+                <div class="status-indicator" id="marketStatus">
+                    <span class="dot"></span>
+                    <span class="text">Market Closed</span>
+                </div>
+                <div class="data-source-badge" id="dataSource">
+                    INIT
+                </div>
+                <button class="icon-btn" onclick="openConfigModal()" title="Settings">⚙️</button>
+            </div>
+        </header>
+
+        <!-- Main Dashboard Grid -->
+        <main class="dashboard-grid">
+            <!-- LEFT PANEL: Market Watch & Signals -->
+            <aside class="left-panel">
+                <div class="panel-card prediction-box">
+                    <div class="panel-head">
+                        <h3>AI PREDICTION</h3>
+                        <span class="live-badge">LIVE</span>
+                    </div>
+                    <div class="gauge-wrapper">
+                        <div class="prediction-gauge">
+                            <div class="gauge-value-display" id="gaugeValue">--%</div>
+                            <div class="gauge-label-display" id="gaugeLabel">NEUTRAL</div>
+                        </div>
+                    </div>
+                    <div class="signal-row">
+                        <div class="signal-box call" id="ceSignalBox">
+                            <span class="sig-label">CALL (CE)</span>
+                            <span class="sig-value" id="ceProb">--%</span>
+                        </div>
+                        <div class="signal-box put" id="peSignalBox">
+                            <span class="sig-label">PUT (PE)</span>
+                            <span class="sig-value" id="peProb">--%</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel-card trade-suggestions-box" id="tradeSuggestionsPanel">
+                    <div class="trade-signal neutral">
+                        <h4>WAITING FOR SIGNAL...</h4>
+                        <div class="trade-details">
+                            <p style="color: var(--text-secondary); text-align: center;">
+                                Loading trade analysis...
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel-card key-levels">
+                    <div class="panel-head">
+                        <h3>KEY LEVELS</h3>
+                    </div>
+                    <div class="level-group">
+                        <label class="res">Resistance</label>
+                        <div id="resistanceLevels" class="level-list">--</div>
+                    </div>
+                    <div class="current-level-wrapper">
+                        <div class="cmp-label">LTP</div>
+                        <div id="currentPrice" class="cmp-main">--</div>
+                    </div>
+                    <div class="level-group">
+                        <label class="sup">Support</label>
+                        <div id="supportLevels" class="level-list">--</div>
+                    </div>
+                </div>
+
+                <div class="panel-card timeframe-predictions">
+                    <div class="panel-head">
+                        <h3>TIMEFRAMES</h3>
+                    </div>
+                    <div id="timeframePredictions" class="timeframe-grid">
+                        <!-- Dynamic timeframe predictions -->
+                    </div>
+                </div>
+            </aside>
+
+            <!-- CENTER PANEL: Chart -->
+            <section class="center-panel">
+                <div class="chart-toolbar">
+                    <div class="symbol-selector">
+                        <button class="sym-btn active" onclick="selectIndex('nifty')">NIFTY</button>
+                        <button class="sym-btn" onclick="selectIndex('banknifty')">BANKNIFTY</button>
+                    </div>
+                    <div class="tf-selector">
+                        <button class="tf-btn active" onclick="changeTimeframe('5m')">5m</button>
+                        <button class="tf-btn" onclick="changeTimeframe('15m')">15m</button>
+                        <button class="tf-btn" onclick="changeTimeframe('1h')">1H</button>
+                        <button class="tf-btn" onclick="changeTimeframe('1d')">1D</button>
+                    </div>
+                    <div class="strategy-selector" id="strategyTabs">
+                        <!-- Injected by JS -->
+                    </div>
+                </div>
+
+                <div class="main-chart-area" id="tvChartContainer">
+                    <!-- TradingView Chart Renders Here -->
+                </div>
+
+                <div class="chart-indicators-summary" id="strategyChartInfo">
+                    <!-- Strategy Details Overlay -->
+                </div>
+            </section>
+
+            <!-- RIGHT PANEL: Option Chain -->
+            <aside class="right-panel">
+                <div class="panel-card option-chain">
+                    <div class="panel-head">
+                        <h3>OPTION CHAIN</h3>
+                        <span class="expiry-date" id="expiryDisplay">EXPIRY: --</span>
+                    </div>
+                    <div class="oc-table-header">
+                        <div class="col-oi">OI (Lakhs)</div>
+                        <div class="col-strike">STRIKE</div>
+                        <div class="col-price">PRICE</div>
+                    </div>
+                    <div class="oc-scroll-container">
+                        <div class="option-chain-list" id="optionChainBody">
+                            <!-- Dynamic Content -->
+                            <div class="oc-row">Loading Chain...</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel-card strategy-metrics">
+                    <div class="panel-head">
+                        <h3>STRATEGIES</h3>
+                    </div>
+                    <div class="strategies-compact-list" id="strategiesGrid">
+                        <!-- Dynamic Content -->
+                    </div>
+                </div>
+            </aside>
+        </main>
+    </div>
+
+    <footer class="footer">
+        <p>© 2024 Nifty Predictor Pro | Real-Time Data from NSE via Yahoo Finance</p>
+        <p class="disclaimer">⚠️ Trading involves risk. This tool is for educational purposes only. Always do your
+            own research.</p>
+    </footer>
+    </div>
+
+    <!-- Strategy Chart Modal -->
+    <div class="modal" id="strategyModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modalTitle">Strategy Details</h3>
+                <button class="modal-close" onclick="closeModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="modal-chart-container">
+                    <canvas id="modalChart"></canvas>
+                </div>
+                <div class="modal-info" id="modalInfo"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Angel One Settings Modal -->
+    <div class="modal" id="angelOneSettingsModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Angel One API Settings</h3>
+                <button class="modal-close" onclick="closeAngelOneSettings()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="angelOneApiKey">API Key:</label>
+                    <input type="text" id="angelOneApiKey" placeholder="Enter your Angel One API Key">
+                </div>
+                <div class="form-group">
+                    <label for="angelOneClientId">Client ID:</label>
+                    <input type="text" id="angelOneClientId" placeholder="Enter your Angel One Client ID">
+                </div>
+                <button class="connect-btn" onclick="saveAngelOneCredentials()">Save Credentials</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Indicator Explanation Modal -->
+    <div class="modal" id="indicatorModal">
+        <div class="modal-content info-modal">
+            <div class="modal-header">
+                <h3 id="indModalTitle">Indicator Logic</h3>
+                <button class="modal-close" onclick="closeIndModal()">&times;</button>
+            </div>
+            <div class="modal-body" id="indModalBody" style="padding: 20px;">
+                <!-- Content injected via JS -->
+            </div>
+        </div>
+    </div>
+
+    <script src="config.js"></script>
+    <script src="totp.js"></script>
+    <script src="indicators.js"></script>
+    <script src="strategies.js"></script>
+    <script src="charts.js"></script>
+    <script src="angelone.js"></script>
+    <script src="app.js?v=2.3"></script>
+</body>
+
+</html>
+```

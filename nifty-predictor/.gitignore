@@ -1,0 +1,18 @@
+# Node modules
+node_modules/
+package-lock.json
+
+# Environment & Secrets
+.env
+*.env
+.env.*
+
+# Logs
+*.log
+logs/
+
+# IDE & Editor settings
+.vscode/
+.idea/
+.cursor/
+.DS_Store

@@ -1,0 +1,9 @@
+{
+  "index": "nifty",
+  "spot_price": 25289.9,
+  "expiry": "2026-01-29",
+  "chain": [],
+  "timestamp": "2026-01-22T16:34:23.134542",
+  "source": "angel_one",
+  "note": "Limited chain due to API constraints"
+}

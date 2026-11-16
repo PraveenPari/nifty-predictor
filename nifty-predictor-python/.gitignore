@@ -1,0 +1,42 @@
+# Environment & Secrets (NEVER COMMIT SENSITIVE KEYS)
+.env
+*.env
+.env.*
+!.env.example
+
+# Python virtual environments
+.venv/
+venv/
+venv2/
+ENV/
+env/
+
+# Python bytecode & caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# Logs & temp files
+logs/
+*.log
+scratch/
+
+# IDE & Editor settings
+.vscode/
+.idea/
+.cursor/
+.agents/
+
+# Operating System files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store
+
+# Node / Frontend build artifacts (if applicable)
+node_modules/
+dist/
+build/

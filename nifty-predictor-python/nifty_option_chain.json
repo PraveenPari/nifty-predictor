@@ -1,0 +1,200 @@
+{
+  "index": "nifty",
+  "spot_price": 25289.9,
+  "atm_strike": 25300,
+  "expiry": "29JAN26",
+  "chain": [
+    {
+      "strike": 24800,
+      "ce_symbol": "NIFTY29JAN2624800CE",
+      "ce_ltp": 0,
+      "ce_oi": 0,
+      "pe_symbol": "NIFTY29JAN2624800PE",
+      "pe_ltp": 0,
+      "pe_oi": 0
+    },
+    {
+      "strike": 24850,
+      "ce_symbol": "NIFTY29JAN2624850CE",
+      "ce_ltp": 0,
+      "ce_oi": 0,
+      "pe_symbol": "NIFTY29JAN2624850PE",
+      "pe_ltp": 0,
+      "pe_oi": 0
+    },
+    {
+      "strike": 24900,
+      "ce_symbol": "NIFTY29JAN2624900CE",
+      "ce_ltp": 0,
+      "ce_oi": 0,
+      "pe_symbol": "NIFTY29JAN2624900PE",
+      "pe_ltp": 0,
+      "pe_oi": 0
+    },
+    {
+      "strike": 24950,
+      "ce_symbol": "NIFTY29JAN2624950CE",
+      "ce_ltp": 0,
+      "ce_oi": 0,
+      "pe_symbol": "NIFTY29JAN2624950PE",
+      "pe_ltp": 0,
+      "pe_oi": 0
+    },
+    {
+      "strike": 25000,
+      "ce_symbol": "NIFTY29JAN2625000CE",
+      "ce_ltp": 0,
+      "ce_oi": 0,
+      "pe_symbol": "NIFTY29JAN2625000PE",
+      "pe_ltp": 0,
+      "pe_oi": 0
+    },
+    {
+      "strike": 25050,
+      "ce_symbol": "NIFTY29JAN2625050CE",
+      "ce_ltp": 0,
+      "ce_oi": 0,
+      "pe_symbol": "NIFTY29JAN2625050PE",
+      "pe_ltp": 0,
+      "pe_oi": 0
+    },
+    {
+      "strike": 25100,
+      "ce_symbol": "NIFTY29JAN2625100CE",
+      "ce_ltp": 0,
+      "ce_oi": 0,
+      "pe_symbol": "NIFTY29JAN2625100PE",
+      "pe_ltp": 0,
+      "pe_oi": 0
+    },
+    {
+      "strike": 25150,
+      "ce_symbol": "NIFTY29JAN2625150CE",
+      "ce_ltp": 0,
+      "ce_oi": 0,
+      "pe_symbol": "NIFTY29JAN2625150PE",
+      "pe_ltp": 0,
+      "pe_oi": 0
+    },
+    {
+      "strike": 25200,
+      "ce_symbol": "NIFTY29JAN2625200CE",
+      "ce_ltp": 0,
+      "ce_oi": 0,
+      "pe_symbol": "NIFTY29JAN2625200PE",
+      "pe_ltp": 0,
+      "pe_oi": 0
+    },
+    {
+      "strike": 25250,
+      "ce_symbol": "NIFTY29JAN2625250CE",
+      "ce_ltp": 0,
+      "ce_oi": 0,
+      "pe_symbol": "NIFTY29JAN2625250PE",
+      "pe_ltp": 0,
+      "pe_oi": 0
+    },
+    {
+      "strike": 25300,
+      "ce_symbol": "NIFTY29JAN2625300CE",
+      "ce_ltp": 0,
+      "ce_oi": 0,
+      "pe_symbol": "NIFTY29JAN2625300PE",
+      "pe_ltp": 0,
+      "pe_oi": 0
+    },
+    {
+      "strike": 25350,
+      "ce_symbol": "NIFTY29JAN2625350CE",
+      "ce_ltp": 0,
+      "ce_oi": 0,
+      "pe_symbol": "NIFTY29JAN2625350PE",
+      "pe_ltp": 0,
+      "pe_oi": 0
+    },
+    {
+      "strike": 25400,
+      "ce_symbol": "NIFTY29JAN2625400CE",
+      "ce_ltp": 0,
+      "ce_oi": 0,
+      "pe_symbol": "NIFTY29JAN2625400PE",
+      "pe_ltp": 0,
+      "pe_oi": 0
+    },
+    {
+      "strike": 25450,
+      "ce_symbol": "NIFTY29JAN2625450CE",
+      "ce_ltp": 0,
+      "ce_oi": 0,
+      "pe_symbol": "NIFTY29JAN2625450PE",
+      "pe_ltp": 0,
+      "pe_oi": 0
+    },
+    {
+      "strike": 25500,
+      "ce_symbol": "NIFTY29JAN2625500CE",
+      "ce_ltp": 0,
+      "ce_oi": 0,
+      "pe_symbol": "NIFTY29JAN2625500PE",
+      "pe_ltp": 0,
+      "pe_oi": 0
+    },
+    {
+      "strike": 25550,
+      "ce_symbol": "NIFTY29JAN2625550CE",
+      "ce_ltp": 0,
+      "ce_oi": 0,
+      "pe_symbol": "NIFTY29JAN2625550PE",
+      "pe_ltp": 0,
+      "pe_oi": 0
+    },
+    {
+      "strike": 25600,
+      "ce_symbol": "NIFTY29JAN2625600CE",
+      "ce_ltp": 0,
+      "ce_oi": 0,
+      "pe_symbol": "NIFTY29JAN2625600PE",
+      "pe_ltp": 0,
+      "pe_oi": 0
+    },
+    {
+      "strike": 25650,
+      "ce_symbol": "NIFTY29JAN2625650CE",
+      "ce_ltp": 0,
+      "ce_oi": 0,
+      "pe_symbol": "NIFTY29JAN2625650PE",
+      "pe_ltp": 0,
+      "pe_oi": 0
+    },
+    {
+      "strike": 25700,
+      "ce_symbol": "NIFTY29JAN2625700CE",
+      "ce_ltp": 0,
+      "ce_oi": 0,
+      "pe_symbol": "NIFTY29JAN2625700PE",
+      "pe_ltp": 0,
+      "pe_oi": 0
+    },
+    {
+      "strike": 25750,
+      "ce_symbol": "NIFTY29JAN2625750CE",
+      "ce_ltp": 0,
+      "ce_oi": 0,
+      "pe_symbol": "NIFTY29JAN2625750PE",
+      "pe_ltp": 0,
+      "pe_oi": 0
+    },
+    {
+      "strike": 25800,
+      "ce_symbol": "NIFTY29JAN2625800CE",
+      "ce_ltp": 0,
+      "ce_oi": 0,
+      "pe_symbol": "NIFTY29JAN2625800PE",
+      "pe_ltp": 0,
+      "pe_oi": 0
+    }
+  ],
+  "timestamp": "2026-01-22T16:43:38.053606",
+  "source": "angel_one_optimized",
+  "strikes_count": 21
+}
