@@ -1,485 +1,394 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Advanced Nifty & Bank Nifty Real-Time Market Prediction with ML">
-    <title>Nifty Predictor Pro | AI-Powered Trading Dashboard</title>
+    <meta name="description" content="Nifty Predictor Pro — Institutional-grade NIFTY & BANKNIFTY prediction terminal. 33 strategies, ML ensemble, live option chain.">
+    <title>Nifty Predictor Pro — Institutional Trading Terminal</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
-        rel="stylesheet">
-    <script src="/static/js/lightweight-charts.standalone.production.js?v=debug1"></script>
-    <script src="/static/js/socket.io.min.js?v=debug1"></script>
-    <link rel="stylesheet" href="/static/styles.css">
-    <style>
-        @keyframes pulse {
-            0%   { opacity: 1; transform: scale(1); }
-            50%  { opacity: 0.4; transform: scale(1.3); }
-            100% { opacity: 1; transform: scale(1); }
-        }
-    </style>
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="/static/js/lightweight-charts.standalone.production.js?v=3.0"></script>
+    <script src="/static/js/socket.io.min.js?v=3.0"></script>
+    <link rel="stylesheet" href="/static/styles.css?v=3.0">
 </head>
-
 <body>
-    <div class="app-container">
-        <!-- Header -->
-        <header class="header">
-            <div class="logo-section">
-                <div class="logo-icon">⚡</div>
-                <span class="logo-text">NIFTY<span class="highlight">PRO</span></span>
-                <span class="version-badge">Python ML v2.0</span>
-            </div>
+    <div class="bg-aurora" aria-hidden="true"></div>
+    <div class="bg-grid" aria-hidden="true"></div>
 
-            <div class="market-ticker">
-                <div class="ticker-item">
-                    <span class="ticker-label">NIFTY</span>
-                    <span class="ticker-value" id="niftyPrice">Loading...</span>
-                    <span class="ticker-change" id="niftyChange">--</span>
+    <div class="app">
+        <!-- ══════════ COMMAND BAR ══════════ -->
+        <header class="topbar">
+            <div class="brand">
+                <div class="brand-mark">
+                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+                        <path d="M3 17L9 11L13 15L21 7" stroke="url(#g1)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M15 7H21V13" stroke="url(#g1)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+                        <defs><linearGradient id="g1" x1="3" y1="7" x2="21" y2="17"><stop stop-color="#34d399"/><stop offset="1" stop-color="#38bdf8"/></linearGradient></defs>
+                    </svg>
                 </div>
-                <div class="ticker-divisor"></div>
-                <div class="ticker-item">
-                    <span class="ticker-label">BANKNIFTY</span>
-                    <span class="ticker-value" id="bankniftyPrice">Loading...</span>
-                    <span class="ticker-change" id="bankniftyChange">--</span>
+                <div class="brand-text">
+                    <span class="brand-name">NIFTY<span class="brand-pro">PRO</span></span>
+                    <span class="brand-sub">INSTITUTIONAL TERMINAL · v3.0</span>
                 </div>
             </div>
 
-            <div class="header-controls">
+            <div class="ticker-cluster">
+                <div class="ticker-card">
+                    <span class="ticker-label">NIFTY 50</span>
+                    <span class="ticker-value" id="niftyPrice">—</span>
+                    <span class="ticker-change" id="niftyChange">—</span>
+                </div>
+                <div class="ticker-card">
+                    <span class="ticker-label">BANK NIFTY</span>
+                    <span class="ticker-value" id="bankniftyPrice">—</span>
+                    <span class="ticker-change" id="bankniftyChange">—</span>
+                </div>
+                <div class="ticker-card vix">
+                    <span class="ticker-label">INDIA VIX</span>
+                    <span class="ticker-value" id="tapeVixTop">—</span>
+                    <span class="ticker-change" id="tapeVixChg">VOL</span>
+                </div>
+            </div>
+
+            <div class="topbar-right">
+                <div class="clock-block">
+                    <span class="clock-time" id="istClock">--:--:--</span>
+                    <span class="clock-zone">IST · NSE</span>
+                </div>
                 <div class="status-indicator" id="marketStatus">
                     <span class="dot"></span>
-                    <span class="text">Connecting...</span>
+                    <span class="text">Connecting…</span>
                 </div>
-                <div class="data-source-badge" id="dataSource">ML LIVE</div>
+                <div class="data-source-badge" id="dataSource">LIVE</div>
             </div>
         </header>
 
-        <!-- Main Dashboard -->
-        <main class="dashboard-grid">
-            <!-- LEFT PANEL -->
-            <aside class="left-panel">
-                <!-- AI Prediction Box -->
-                <div class="panel-card prediction-box">
-                    <div class="panel-head">
-                        <h3>🤖 AI PREDICTION</h3>
-                        <span class="live-badge">ML LIVE</span>
-                    </div>
-                    <div class="gauge-wrapper">
-                        <div class="prediction-gauge">
-                            <div class="gauge-value-display" id="gaugeValue">--%</div>
-                            <div class="gauge-label-display" id="gaugeLabel">ANALYZING</div>
+        <!-- ══════════ SCROLLING TAPE ══════════ -->
+        <div class="tape" aria-hidden="true">
+            <div class="tape-track" id="tapeTrack">
+                <div class="tape-group">
+                    <span class="tape-item">NIFTY <b class="tape-nifty">—</b> <i class="tape-nifty-chg">—</i></span>
+                    <span class="tape-sep">◆</span>
+                    <span class="tape-item">BANKNIFTY <b class="tape-bank">—</b> <i class="tape-bank-chg">—</i></span>
+                    <span class="tape-sep">◆</span>
+                    <span class="tape-item">VIX <b class="tape-vix">—</b></span>
+                    <span class="tape-sep">◆</span>
+                    <span class="tape-item">PCR <b class="tape-pcr">—</b></span>
+                    <span class="tape-sep">◆</span>
+                    <span class="tape-item">FII <b class="tape-fii">—</b></span>
+                    <span class="tape-sep">◆</span>
+                    <span class="tape-item">DII <b class="tape-dii">—</b></span>
+                    <span class="tape-sep">◆</span>
+                    <span class="tape-item">AI <b class="tape-ai">ANALYZING</b></span>
+                    <span class="tape-sep">◆</span>
+                    <span class="tape-item">PRO <b class="tape-pro">—</b></span>
+                    <span class="tape-sep">◆</span>
+                </div>
+                <div class="tape-group">
+                    <span class="tape-item">NIFTY <b class="tape-nifty">—</b> <i class="tape-nifty-chg">—</i></span>
+                    <span class="tape-sep">◆</span>
+                    <span class="tape-item">BANKNIFTY <b class="tape-bank">—</b> <i class="tape-bank-chg">—</i></span>
+                    <span class="tape-sep">◆</span>
+                    <span class="tape-item">VIX <b class="tape-vix">—</b></span>
+                    <span class="tape-sep">◆</span>
+                    <span class="tape-item">PCR <b class="tape-pcr">—</b></span>
+                    <span class="tape-sep">◆</span>
+                    <span class="tape-item">FII <b class="tape-fii">—</b></span>
+                    <span class="tape-sep">◆</span>
+                    <span class="tape-item">DII <b class="tape-dii">—</b></span>
+                    <span class="tape-sep">◆</span>
+                    <span class="tape-item">AI <b class="tape-ai">ANALYZING</b></span>
+                    <span class="tape-sep">◆</span>
+                    <span class="tape-item">PRO <b class="tape-pro">—</b></span>
+                    <span class="tape-sep">◆</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- ══════════ MAIN LAYOUT ══════════ -->
+        <main class="layout">
+            <section class="col-main">
+                <!-- ── HERO: VERDICTS ── -->
+                <div class="hero">
+                    <!-- AI Prediction -->
+                    <div class="card hero-card ai-card">
+                        <div class="card-head">
+                            <h3><span class="head-icon ai">◈</span> AI PREDICTION</h3>
+                            <span class="live-badge"><span class="pulse-dot"></span>ML LIVE</span>
+                        </div>
+                        <div class="gauge-wrap">
+                            <svg class="gauge-svg" viewBox="0 0 140 140">
+                                <circle class="gauge-track" cx="70" cy="70" r="56" />
+                                <circle class="gauge-ring" id="gaugeRing" cx="70" cy="70" r="56" />
+                            </svg>
+                            <div class="gauge-center">
+                                <div class="gauge-value-display" id="gaugeValue">—</div>
+                                <div class="gauge-label-display" id="gaugeLabel">ANALYZING</div>
+                            </div>
+                        </div>
+                        <div class="cepe-duo">
+                            <div class="cepe call" id="ceSignalBox">
+                                <span class="sig-label">CALL · CE</span>
+                                <div class="cepe-bar"><div class="cepe-fill call-fill" id="ceBar"></div></div>
+                                <span class="sig-value" id="ceProb">—</span>
+                            </div>
+                            <div class="cepe put" id="peSignalBox">
+                                <span class="sig-label">PUT · PE</span>
+                                <div class="cepe-bar"><div class="cepe-fill put-fill" id="peBar"></div></div>
+                                <span class="sig-value" id="peProb">—</span>
+                            </div>
+                        </div>
+                        <div class="ml-info" id="mlInfo">
+                            <div class="ml-row"><span>Model Agreement</span><span id="modelAgreement">—</span></div>
+                            <div class="ml-row"><span>Confidence</span><span id="confidence">—</span></div>
                         </div>
                     </div>
-                    <div class="signal-row">
-                        <div class="signal-box call" id="ceSignalBox">
-                            <span class="sig-label">CALL (CE)</span>
-                            <span class="sig-value" id="ceProb">--%</span>
+
+                    <!-- Pro Confluence -->
+                    <div class="card hero-card pro-card" id="proVerdictCard">
+                        <div class="card-head">
+                            <h3><span class="head-icon pro">⬢</span> PRO CONFLUENCE <span class="pro-count-pill">15 SYSTEMS</span></h3>
+                            <span class="live-badge gold" id="proVerdictAction">WAIT</span>
                         </div>
-                        <div class="signal-box put" id="peSignalBox">
-                            <span class="sig-label">PUT (PE)</span>
-                            <span class="sig-value" id="peProb">--%</span>
+                        <div class="verdict-hero">
+                            <div class="verdict-dir" id="proVerdictDirection">ANALYZING</div>
+                            <div class="verdict-conf"><span id="proVerdictConfidence">—</span> CONFIDENCE</div>
+                        </div>
+                        <div class="verdict-grid">
+                            <div class="verdict-stat"><label>VOTES B·S·N</label><span id="proVerdictVotes">—</span></div>
+                            <div class="verdict-stat"><label>REGIME</label><span id="proVerdictRegime">—</span></div>
+                        </div>
+                        <div class="verdict-plan">
+                            <label>TRADE PLAN</label>
+                            <span id="proVerdictPlan">Awaiting confluence…</span>
                         </div>
                     </div>
-                    <div class="ml-info" id="mlInfo">
-                        <div class="ml-row">
-                            <span>Model Agreement:</span>
-                            <span id="modelAgreement">--</span>
+
+                    <!-- Trade Plan -->
+                    <div class="card hero-card trade-card">
+                        <div class="card-head">
+                            <h3><span class="head-icon trade">⬣</span> TRADE PLAN</h3>
+                            <span class="live-badge dim">RISK-FIRST</span>
                         </div>
-                        <div class="ml-row">
-                            <span>Confidence:</span>
-                            <span id="confidence">--</span>
+                        <div id="tradeSuggestionsPanel">
+                            <div class="trade-signal neutral">
+                                <h4>SCANNING MARKET…</h4>
+                                <div class="trade-details">
+                                    <p class="muted-center">Quant models warming up — live levels in seconds.</p>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Trade Recommendations -->
-                <div class="panel-card trade-suggestions-box" id="tradeSuggestionsPanel">
-                    <div class="trade-signal neutral">
-                        <h4>WAITING FOR SIGNAL...</h4>
-                        <div class="trade-details">
-                            <p style="color: var(--text-secondary); text-align: center;">
-                                Analyzing market data...
-                            </p>
+                <!-- ── CHART ── -->
+                <div class="card chart-card">
+                    <div class="chart-toolbar">
+                        <div class="symbol-selector">
+                            <button class="sym-btn active" onclick="selectIndex('nifty')">NIFTY</button>
+                            <button class="sym-btn" onclick="selectIndex('banknifty')">BANKNIFTY</button>
                         </div>
+                        <div class="tf-selector">
+                            <button class="tf-btn active" onclick="changeTimeframe('5m')">5m</button>
+                            <button class="tf-btn" onclick="changeTimeframe('15m')">15m</button>
+                            <button class="tf-btn" onclick="changeTimeframe('1h')">1H</button>
+                            <button class="tf-btn" onclick="changeTimeframe('1d')">1D</button>
+                        </div>
+                        <div class="chart-type-selector">
+                            <button class="chart-btn active" onclick="setChartType('candle', this)">Candles</button>
+                            <button class="chart-btn" onclick="setChartType('line', this)">Line</button>
+                        </div>
+                        <div class="refresh-controls">
+                            <button class="refresh-btn" onclick="refreshStockPicks()">↻ Refresh</button>
+                            <span class="last-update" id="lastUpdate">—</span>
+                        </div>
+                    </div>
+                    <div class="main-chart-area">
+                        <div id="tvChartContainer"></div>
+                        <div class="chart-loader" id="chartLoader"><span class="spinner"></span> Loading chart…</div>
                     </div>
                 </div>
 
-                <!-- Key Levels -->
-                <div class="panel-card key-levels">
-                    <div class="panel-head">
-                        <h3>📍 KEY LEVELS</h3>
+                <!-- ── STRATEGIES ── -->
+                <div class="card strategies-card">
+                    <div class="card-head">
+                        <h3><span class="head-icon strat">▦</span> STRATEGY MATRIX <span class="strat-total" id="stratTotal">33 SYSTEMS</span></h3>
+                        <span class="live-badge dim">CLICK ANY CARD FOR DETAIL</span>
                     </div>
-                    <div class="level-group">
-                        <label class="res">Resistance</label>
-                        <div id="resistanceLevels" class="level-list">--</div>
-                    </div>
-                    <div class="current-level-wrapper">
-                        <div class="cmp-label">LTP</div>
-                        <div id="currentPrice" class="cmp-main">--</div>
-                    </div>
-                    <div class="level-group">
-                        <label class="sup">Support</label>
-                        <div id="supportLevels" class="level-list">--</div>
-                    </div>
-                </div>
-            </aside>
-
-            <!-- CENTER PANEL: Stock Picks & Analysis -->
-            <section class="center-panel">
-                <!-- Chart Tools -->
-                <div class="chart-toolbar">
-                    <div class="symbol-selector">
-                        <button class="sym-btn active" onclick="selectIndex('nifty')">NIFTY</button>
-                        <button class="sym-btn" onclick="selectIndex('banknifty')">BANKNIFTY</button>
-                    </div>
-                    <div class="tf-selector">
-                        <button class="tf-btn active" onclick="changeTimeframe('5m')">5m</button>
-                        <button class="tf-btn" onclick="changeTimeframe('15m')">15m</button>
-                        <button class="tf-btn" onclick="changeTimeframe('1h')">1h</button>
-                        <button class="tf-btn" onclick="changeTimeframe('1d')">1d</button>
-                    </div>
-                    <div class="chart-type-selector">
-                        <button class="chart-btn active" onclick="setChartType('candle')">🕯️ Candle</button>
-                        <button class="chart-btn" onclick="setChartType('line')">📈 Line</button>
-                    </div>
-                    <div class="refresh-controls">
-                        <button class="refresh-btn" onclick="refreshStockPicks()">🔄 Refresh Picks</button>
-                        <span class="last-update" id="lastUpdate">Updated: --</span>
-                    </div>
-                </div>
-
-                <!-- Main Chart -->
-                <div class="main-chart-area" style="position: relative; height: 380px; width: 100%; margin-bottom: 1.25rem;">
-                    <div id="tvChartContainer" style="width: 100%; height: 100%;"></div>
-                </div>
-
-                <!-- ================= NIFTY RECENT TRADES ================= -->
-                <div class="panel-card recent-trades-card" style="margin-bottom: 1.25rem;">
-                    <div class="panel-head" style="display: flex; justify-content: space-between; align-items: center;">
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <h3>?? NIFTY 50 - RECENT TRADES & SUCCESS RATE</h3>
-                            <span class="live-badge" style="background: rgba(16, 185, 129, 0.2); color: var(--up-color); font-size: 0.72rem; padding: 2px 8px; border-radius: 4px; font-weight: 600;">LIVE (1 LOT = 25 QTY)</span>
-                        </div>
-                        <div style="display: flex; align-items: center; gap: 10px;">
-                            <label style="font-size: 0.8rem; color: var(--text-secondary);">Window:</label>
-                            <select id="niftyTradesHours" onchange="loadNiftyTrades()" style="background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 6px; padding: 4px 8px; font-size: 0.82rem; cursor: pointer;">
-                                <option value="2">Last 2 Hours</option>
-                                <option value="4" selected>Last 4 Hours</option>
-                                <option value="6">Today (Full Session)</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <!-- Nifty Summary Stats Bar -->
-                    <div class="trades-summary-bar" style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; padding: 12px; background: rgba(0,0,0,0.25); border-radius: 8px; margin: 10px 0;">
-                        <div class="metric-card" style="text-align: center;">
-                            <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 4px;">WIN RATE</div>
-                            <div id="niftyWinRate" style="font-size: 1.4rem; font-weight: 700; color: var(--up-color);">--%</div>
-                        </div>
-                        <div class="metric-card" style="text-align: center;">
-                            <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 4px;">TRADES (W+L)</div>
-                            <div id="niftyTotalTrades" style="font-size: 1.4rem; font-weight: 700; color: var(--text-primary);">--</div>
-                        </div>
-                        <div class="metric-card" style="text-align: center;">
-                            <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 4px;">WINS / LOSSES</div>
-                            <div id="niftyWinsLosses" style="font-size: 1.4rem; font-weight: 700; color: var(--text-secondary);">-- / --</div>
-                        </div>
-                        <div class="metric-card" style="text-align: center;">
-                            <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 4px;">NET POINTS</div>
-                            <div id="niftyNetPoints" style="font-size: 1.4rem; font-weight: 700; color: var(--up-color);">-- pts</div>
-                        </div>
-                        <div class="metric-card" style="text-align: center;">
-                            <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 4px;">EST. P&L (1 LOT)</div>
-                            <div id="niftyNetPnl" style="font-size: 1.4rem; font-weight: 700; color: var(--up-color);">?--</div>
-                        </div>
-                        <div class="metric-card" style="text-align: center;">
-                            <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 4px;">CURRENT STREAK</div>
-                            <div id="niftyStreak" style="font-size: 1.2rem; font-weight: 700; color: var(--accent-cyan);">--</div>
-                        </div>
-                    </div>
-
-                    <!-- Nifty Trades Table -->
-                    <div style="overflow-x: auto; max-height: 260px; overflow-y: auto;">
-                        <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem; text-align: left;">
-                            <thead>
-                                <tr style="border-bottom: 1px solid var(--border-color); color: var(--text-secondary); background: rgba(255,255,255,0.02);">
-                                    <th style="padding: 8px 10px;">Time</th>
-                                    <th style="padding: 8px 10px;">Trade Action</th>
-                                    <th style="padding: 8px 10px;">Entry</th>
-                                    <th style="padding: 8px 10px;">Target</th>
-                                    <th style="padding: 8px 10px;">Stop Loss</th>
-                                    <th style="padding: 8px 10px;">Exit / LTP</th>
-                                    <th style="padding: 8px 10px;">Points</th>
-                                    <th style="padding: 8px 10px;">P&L (?)</th>
-                                    <th style="padding: 8px 10px; text-align: center;">Status</th>
-                                    <th style="padding: 8px 10px;">Trigger Reason</th>
-                                </tr>
-                            </thead>
-                            <tbody id="niftyTradesBody">
-                                <tr><td colspan="10" style="text-align: center; padding: 20px; color: var(--text-muted);">Loading NIFTY trades...</td></tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-
-                <!-- ================= BANKNIFTY RECENT TRADES ================= -->
-                <div class="panel-card recent-trades-card" style="margin-bottom: 1.25rem;">
-                    <div class="panel-head" style="display: flex; justify-content: space-between; align-items: center;">
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <h3>?? BANK NIFTY - RECENT TRADES & SUCCESS RATE</h3>
-                            <span class="live-badge" style="background: rgba(59, 130, 246, 0.2); color: var(--accent-blue); font-size: 0.72rem; padding: 2px 8px; border-radius: 4px; font-weight: 600;">LIVE (1 LOT = 15 QTY)</span>
-                        </div>
-                        <div style="display: flex; align-items: center; gap: 10px;">
-                            <label style="font-size: 0.8rem; color: var(--text-secondary);">Window:</label>
-                            <select id="bankniftyTradesHours" onchange="loadBankniftyTrades()" style="background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 6px; padding: 4px 8px; font-size: 0.82rem; cursor: pointer;">
-                                <option value="2">Last 2 Hours</option>
-                                <option value="4" selected>Last 4 Hours</option>
-                                <option value="6">Today (Full Session)</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <!-- BankNifty Summary Stats Bar -->
-                    <div class="trades-summary-bar" style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; padding: 12px; background: rgba(0,0,0,0.25); border-radius: 8px; margin: 10px 0;">
-                        <div class="metric-card" style="text-align: center;">
-                            <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 4px;">WIN RATE</div>
-                            <div id="bnWinRate" style="font-size: 1.4rem; font-weight: 700; color: var(--up-color);">--%</div>
-                        </div>
-                        <div class="metric-card" style="text-align: center;">
-                            <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 4px;">TRADES (W+L)</div>
-                            <div id="bnTotalTrades" style="font-size: 1.4rem; font-weight: 700; color: var(--text-primary);">--</div>
-                        </div>
-                        <div class="metric-card" style="text-align: center;">
-                            <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 4px;">WINS / LOSSES</div>
-                            <div id="bnWinsLosses" style="font-size: 1.4rem; font-weight: 700; color: var(--text-secondary);">-- / --</div>
-                        </div>
-                        <div class="metric-card" style="text-align: center;">
-                            <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 4px;">NET POINTS</div>
-                            <div id="bnNetPoints" style="font-size: 1.4rem; font-weight: 700; color: var(--up-color);">-- pts</div>
-                        </div>
-                        <div class="metric-card" style="text-align: center;">
-                            <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 4px;">EST. P&L (1 LOT)</div>
-                            <div id="bnNetPnl" style="font-size: 1.4rem; font-weight: 700; color: var(--up-color);">?--</div>
-                        </div>
-                        <div class="metric-card" style="text-align: center;">
-                            <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 4px;">CURRENT STREAK</div>
-                            <div id="bnStreak" style="font-size: 1.2rem; font-weight: 700; color: var(--accent-cyan);">--</div>
-                        </div>
-                    </div>
-
-                    <!-- BankNifty Trades Table -->
-                    <div style="overflow-x: auto; max-height: 260px; overflow-y: auto;">
-                        <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem; text-align: left;">
-                            <thead>
-                                <tr style="border-bottom: 1px solid var(--border-color); color: var(--text-secondary); background: rgba(255,255,255,0.02);">
-                                    <th style="padding: 8px 10px;">Time</th>
-                                    <th style="padding: 8px 10px;">Trade Action</th>
-                                    <th style="padding: 8px 10px;">Entry</th>
-                                    <th style="padding: 8px 10px;">Target</th>
-                                    <th style="padding: 8px 10px;">Stop Loss</th>
-                                    <th style="padding: 8px 10px;">Exit / LTP</th>
-                                    <th style="padding: 8px 10px;">Points</th>
-                                    <th style="padding: 8px 10px;">P&L (?)</th>
-                                    <th style="padding: 8px 10px; text-align: center;">Status</th>
-                                    <th style="padding: 8px 10px;">Trigger Reason</th>
-                                </tr>
-                            </thead>
-                            <tbody id="bankniftyTradesBody">
-                                <tr><td colspan="10" style="text-align: center; padding: 20px; color: var(--text-muted);">Loading BANKNIFTY trades...</td></tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-
-                <!-- Stock Picks Section -->
-                <div class="stock-picks-container">
-                    <!-- Short-Term Picks -->
-                    <div class="panel-card stock-picks-card">
-                        <div class="panel-head">
-                            <h3>🚀 SHORT-TERM PICKS (15 Min)</h3>
-                            <span class="picks-badge" id="shortTermCount">0 Stocks</span>
-                        </div>
-                        <div class="picks-description">Top stocks for quick intraday trades based on momentum & RSI</div>
-                        <div class="stock-picks-list" id="shortTermPicks">
-                            <div class="loading-picks">Analyzing 50+ stocks...</div>
-                        </div>
-                    </div>
-
-                    <!-- Long-Term Picks -->
-                    <div class="panel-card stock-picks-card">
-                        <div class="panel-head">
-                            <h3>💎 INVESTMENT PICKS</h3>
-                            <span class="picks-badge" id="longTermCount">0 Stocks</span>
-                        </div>
-                        <div class="picks-description">Top stocks for investment based on trend & technical strength</div>
-                        <div class="stock-picks-list" id="longTermPicks">
-                            <div class="loading-picks">Analyzing 50+ stocks...</div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Market Movers from MoneyControl -->
-                <div class="market-movers-section">
-                    <div class="panel-card movers-card">
-                        <div class="panel-head">
-                            <h3>📈 TOP GAINERS</h3>
-                            <span class="source-badge">MoneyControl</span>
-                        </div>
-                        <div class="movers-list" id="topGainers">
-                            <div class="loading-picks">Loading...</div>
-                        </div>
-                    </div>
-                    <div class="panel-card movers-card">
-                        <div class="panel-head">
-                            <h3>📉 TOP LOSERS</h3>
-                            <span class="source-badge">MoneyControl</span>
-                        </div>
-                        <div class="movers-list" id="topLosers">
-                            <div class="loading-picks">Loading...</div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Pro Confluence Verdict -->
-                <div class="panel-card" id="proVerdictCard" style="display:none;">
-                    <div class="panel-head">
-                        <h3>🎯 PRO CONFLUENCE</h3>
-                        <span class="live-badge" id="proVerdictAction">--</span>
-                    </div>
-                    <div class="ml-info">
-                        <div class="ml-row"><span>Direction:</span><span id="proVerdictDirection">--</span></div>
-                        <div class="ml-row"><span>Confidence:</span><span id="proVerdictConfidence">--</span></div>
-                        <div class="ml-row"><span>Votes (B/B/N):</span><span id="proVerdictVotes">--</span></div>
-                        <div class="ml-row"><span>Regime:</span><span id="proVerdictRegime">--</span></div>
-                        <div class="ml-row"><span>Plan:</span><span id="proVerdictPlan">--</span></div>
-                    </div>
-                </div>
-
-                <!-- Strategy Tabs -->
-                <div class="strategy-tabs-container">
                     <div class="strategy-tabs" id="strategyTabs">
-                        <button class="strat-tab active" data-category="all" onclick="filterStrategies('all')">All
-                            Strategies</button>
-                        <button class="strat-tab" data-category="momentum" onclick="filterStrategies('momentum')">📊
-                            Momentum</button>
-                        <button class="strat-tab" data-category="trend" onclick="filterStrategies('trend')">📈
-                            Trend</button>
-                        <button class="strat-tab" data-category="volatility" onclick="filterStrategies('volatility')">🌊
-                            Volatility</button>
-                        <button class="strat-tab" data-category="volume" onclick="filterStrategies('volume')">📦
-                            Volume</button>
-                        <button class="strat-tab" data-category="sentiment" onclick="filterStrategies('sentiment')">💭
-                            Sentiment</button>
-                        <button class="strat-tab" data-category="support_resistance"
-                            onclick="filterStrategies('support_resistance')">🧲 Levels</button>
-                        <button class="strat-tab" data-category="pro" onclick="filterStrategies('pro')">🎯
-                            Pro</button>
+                        <button class="strat-tab active" data-category="all" onclick="filterStrategies('all', this)">All <span class="tab-count" id="count-all">33</span></button>
+                        <button class="strat-tab" data-category="momentum" onclick="filterStrategies('momentum', this)">Momentum <span class="tab-count" id="count-momentum">–</span></button>
+                        <button class="strat-tab" data-category="trend" onclick="filterStrategies('trend', this)">Trend <span class="tab-count" id="count-trend">–</span></button>
+                        <button class="strat-tab" data-category="volatility" onclick="filterStrategies('volatility', this)">Volatility <span class="tab-count" id="count-volatility">–</span></button>
+                        <button class="strat-tab" data-category="volume" onclick="filterStrategies('volume', this)">Volume <span class="tab-count" id="count-volume">–</span></button>
+                        <button class="strat-tab" data-category="sentiment" onclick="filterStrategies('sentiment', this)">Sentiment <span class="tab-count" id="count-sentiment">–</span></button>
+                        <button class="strat-tab" data-category="support_resistance" onclick="filterStrategies('support_resistance', this)">Levels <span class="tab-count" id="count-support_resistance">–</span></button>
+                        <button class="strat-tab gold-tab" data-category="pro" onclick="filterStrategies('pro', this)">⬢ Pro <span class="tab-count" id="count-pro">15</span></button>
                     </div>
                     <div class="strategies-grid" id="strategiesGrid">
-                        <!-- Strategies will be populated here -->
+                        <div class="loading-picks">Quant engines calibrating — 33 strategies incoming…</div>
+                    </div>
+                </div>
+
+                <!-- ── RECENT TRADES: NIFTY ── -->
+                <div class="card trades-card">
+                    <div class="card-head split">
+                        <h3><span class="head-icon nifty">◉</span> NIFTY 50 · TRACK RECORD</h3>
+                        <div class="window-picker">
+                            <label>Window</label>
+                            <select id="niftyTradesHours" onchange="loadNiftyTrades()">
+                                <option value="2">Last 2 Hours</option>
+                                <option value="4" selected>Last 4 Hours</option>
+                                <option value="6">Full Session</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="trades-summary-bar">
+                        <div class="metric-card"><label>WIN RATE</label><span id="niftyWinRate">—</span></div>
+                        <div class="metric-card"><label>TRADES</label><span id="niftyTotalTrades">—</span></div>
+                        <div class="metric-card"><label>WINS · LOSSES</label><span id="niftyWinsLosses">—</span></div>
+                        <div class="metric-card"><label>NET POINTS</label><span id="niftyNetPoints">—</span></div>
+                        <div class="metric-card"><label>EST. P&amp;L / LOT</label><span id="niftyNetPnl">—</span></div>
+                        <div class="metric-card"><label>STREAK</label><span id="niftyStreak">—</span></div>
+                    </div>
+                    <div class="table-scroll">
+                        <table class="trades-table">
+                            <thead><tr><th>Time</th><th>Action</th><th>Entry</th><th>Target</th><th>Stop</th><th>Exit/LTP</th><th>Points</th><th>P&amp;L ₹</th><th>Status</th><th>Trigger</th></tr></thead>
+                            <tbody id="niftyTradesBody"><tr><td colspan="10" class="muted-center">Loading NIFTY track record…</td></tr></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- ── RECENT TRADES: BANKNIFTY ── -->
+                <div class="card trades-card">
+                    <div class="card-head split">
+                        <h3><span class="head-icon bn">◉</span> BANK NIFTY · TRACK RECORD</h3>
+                        <div class="window-picker">
+                            <label>Window</label>
+                            <select id="bankniftyTradesHours" onchange="loadBankniftyTrades()">
+                                <option value="2">Last 2 Hours</option>
+                                <option value="4" selected>Last 4 Hours</option>
+                                <option value="6">Full Session</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="trades-summary-bar">
+                        <div class="metric-card"><label>WIN RATE</label><span id="bnWinRate">—</span></div>
+                        <div class="metric-card"><label>TRADES</label><span id="bnTotalTrades">—</span></div>
+                        <div class="metric-card"><label>WINS · LOSSES</label><span id="bnWinsLosses">—</span></div>
+                        <div class="metric-card"><label>NET POINTS</label><span id="bnNetPoints">—</span></div>
+                        <div class="metric-card"><label>EST. P&amp;L / LOT</label><span id="bnNetPnl">—</span></div>
+                        <div class="metric-card"><label>STREAK</label><span id="bnStreak">—</span></div>
+                    </div>
+                    <div class="table-scroll">
+                        <table class="trades-table">
+                            <thead><tr><th>Time</th><th>Action</th><th>Entry</th><th>Target</th><th>Stop</th><th>Exit/LTP</th><th>Points</th><th>P&amp;L ₹</th><th>Status</th><th>Trigger</th></tr></thead>
+                            <tbody id="bankniftyTradesBody"><tr><td colspan="10" class="muted-center">Loading BANKNIFTY track record…</td></tr></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- ── STOCK PICKS ── -->
+                <div class="picks-duo">
+                    <div class="card">
+                        <div class="card-head">
+                            <h3><span class="head-icon up">▲</span> INTRADAY PICKS · 15 MIN</h3>
+                            <span class="picks-badge" id="shortTermCount">0</span>
+                        </div>
+                        <div class="picks-description">Momentum + RSI ranked across NIFTY 50</div>
+                        <div class="stock-picks-list" id="shortTermPicks"><div class="loading-picks">Scanning 50 stocks…</div></div>
+                    </div>
+                    <div class="card">
+                        <div class="card-head">
+                            <h3><span class="head-icon gem">◆</span> INVESTMENT PICKS</h3>
+                            <span class="picks-badge" id="longTermCount">0</span>
+                        </div>
+                        <div class="picks-description">Trend + technical strength ranked</div>
+                        <div class="stock-picks-list" id="longTermPicks"><div class="loading-picks">Scanning 50 stocks…</div></div>
+                    </div>
+                </div>
+
+                <!-- ── MOVERS ── -->
+                <div class="picks-duo">
+                    <div class="card">
+                        <div class="card-head">
+                            <h3><span class="head-icon up">▲</span> TOP GAINERS</h3>
+                            <span class="source-badge">MoneyControl</span>
+                        </div>
+                        <div class="movers-list" id="topGainers"><div class="loading-picks">Loading…</div></div>
+                    </div>
+                    <div class="card">
+                        <div class="card-head">
+                            <h3><span class="head-icon down">▼</span> TOP LOSERS</h3>
+                            <span class="source-badge">MoneyControl</span>
+                        </div>
+                        <div class="movers-list" id="topLosers"><div class="loading-picks">Loading…</div></div>
                     </div>
                 </div>
             </section>
 
-            <!-- RIGHT PANEL -->
-            <aside class="right-panel">
-                <!-- Option Chain -->
-                <div class="panel-card option-chain">
-                    <div class="panel-head">
-                        <h3>📋 OPTION CHAIN</h3>
-                        <span class="expiry-date" id="expiryDisplay">EXPIRY: --</span>
+            <!-- ══════════ SIDE RAIL ══════════ -->
+            <aside class="col-side">
+                <div class="card">
+                    <div class="card-head"><h3><span class="head-icon lvl">◎</span> KEY LEVELS</h3></div>
+                    <div class="level-group">
+                        <label class="res">RESISTANCE</label>
+                        <div id="resistanceLevels" class="level-list">—</div>
                     </div>
-                    <div class="oc-table-header">
-                        <div class="col-oi">CE OI</div>
-                        <div class="col-strike">STRIKE</div>
-                        <div class="col-oi">PE OI</div>
+                    <div class="current-level-wrapper">
+                        <div class="cmp-label">LAST TRADED PRICE</div>
+                        <div id="currentPrice" class="cmp-main">—</div>
                     </div>
-                    <div class="oc-scroll-container">
-                        <div class="option-chain-list" id="optionChainBody">
-                            <div class="oc-row">Loading...</div>
-                        </div>
+                    <div class="level-group">
+                        <label class="sup">SUPPORT</label>
+                        <div id="supportLevels" class="level-list">—</div>
                     </div>
                 </div>
 
-                <!-- ML Model Stats -->
-                <div class="panel-card ml-stats">
-                    <div class="panel-head">
-                        <h3>🧠 ML MODEL</h3>
-                        <button class="train-btn" onclick="trainModel()">Retrain</button>
+                <div class="card oc-card">
+                    <div class="card-head"><h3><span class="head-icon oc">☰</span> OPTION CHAIN</h3><span class="expiry-date" id="expiryDisplay">—</span></div>
+                    <div class="oc-table-header"><div class="col-oi">CE OI</div><div class="col-strike">STRIKE</div><div class="col-oi">PE OI</div></div>
+                    <div class="oc-scroll-container"><div class="option-chain-list" id="optionChainBody"><div class="oc-row">Loading…</div></div></div>
+                </div>
+
+                <div class="card">
+                    <div class="card-head"><h3><span class="head-icon sent">◍</span> MARKET SENTIMENT</h3></div>
+                    <div class="sentiment-grid" id="sentimentGrid">
+                        <div class="sent-item"><span class="sent-label">VIX</span><span class="sent-value" id="vixValue">—</span></div>
+                        <div class="sent-item"><span class="sent-label">PCR</span><span class="sent-value" id="pcrValue">—</span></div>
+                        <div class="sent-item"><span class="sent-label">FII NET ₹Cr</span><span class="sent-value" id="fiiValue">—</span></div>
+                        <div class="sent-item"><span class="sent-label">DII NET ₹Cr</span><span class="sent-value" id="diiValue">—</span></div>
                     </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-head"><h3><span class="head-icon ml">⬔</span> ML ENSEMBLE</h3><button class="train-btn" onclick="trainModel()">Retrain</button></div>
                     <div id="mlStats">
-                        <div class="ml-stat-row">
-                            <span>Status:</span>
-                            <span class="ml-status" id="mlStatus">Initializing...</span>
-                        </div>
-                        <div class="ml-stat-row">
-                            <span>RF Prediction:</span>
-                            <span id="rfPrediction">--</span>
-                        </div>
-                        <div class="ml-stat-row">
-                            <span>GB Prediction:</span>
-                            <span id="gbPrediction">--</span>
-                        </div>
-                    </div>
+                        <div class="ml-stat-row"><span>Engine</span><span class="ml-status" id="mlStatus">Booting…</span></div>
+                        <div class="ml-stat-row"><span>Random Forest</span><span id="rfPrediction">—</span></div>
+                        <div class="ml-stat-row"><span>Grad Boost</span><span id="gbPrediction">—</span></div>
                     </div>
                     <div class="top-features" id="topFeatures">
-                        <h4>Top Features</h4>
+                        <h4>TOP DRIVERS</h4>
                         <div id="featuresList"></div>
                     </div>
                 </div>
 
-                <!-- Accuracy Tracker -->
-                <div class="panel-card accuracy-stats">
-                    <div class="panel-head">
-                        <h3>🎯 ACCURACY TRACKER</h3>
-                    </div>
-                    <div class="accuracy-grid" style="padding: 10px;">
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
-                            <span style="color: var(--text-secondary);">Win Rate:</span>
-                            <span id="accWinRate" style="font-weight: bold; color: var(--up-color);">--%</span>
-                        </div>
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
-                            <span style="color: var(--text-secondary);">Validated:</span>
-                            <span id="accValidated" style="font-weight: bold;">--</span>
-                        </div>
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
-                            <span style="color: var(--text-secondary);">Wins / Losses:</span>
-                            <span id="accWinsLosses" style="font-weight: bold;">-- / --</span>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Market Sentiment -->
-                <div class="panel-card sentiment-box">
-                    <div class="panel-head">
-                        <h3>📊 SENTIMENT</h3>
-                    </div>
-                    <div class="sentiment-grid" id="sentimentGrid">
-                        <div class="sent-item">
-                            <span class="sent-label">VIX</span>
-                            <span class="sent-value" id="vixValue">--</span>
-                        </div>
-                        <div class="sent-item">
-                            <span class="sent-label">PCR</span>
-                            <span class="sent-value" id="pcrValue">--</span>
-                        </div>
-                        <div class="sent-item">
-                            <span class="sent-label">FII Net</span>
-                            <span class="sent-value" id="fiiValue">--</span>
-                        </div>
-                        <div class="sent-item">
-                            <span class="sent-label">DII Net</span>
-                            <span class="sent-value" id="diiValue">--</span>
-                        </div>
+                <div class="card">
+                    <div class="card-head"><h3><span class="head-icon acc">◎</span> LIVE ACCURACY</h3></div>
+                    <div class="accuracy-grid">
+                        <div class="acc-row"><span>Win Rate</span><span id="accWinRate">—</span></div>
+                        <div class="acc-row"><span>Validated</span><span id="accValidated">—</span></div>
+                        <div class="acc-row"><span>Wins · Losses</span><span id="accWinsLosses">—</span></div>
                     </div>
                 </div>
             </aside>
         </main>
 
-        <!-- Footer -->
         <footer class="footer">
-            <p>© 2024 Nifty Predictor Pro | Python ML-Powered Trading Dashboard</p>
-            <p class="disclaimer">⚠️ Trading involves risk. This tool is for educational purposes only.</p>
+            <p><strong>NIFTY PRO</strong> · Institutional prediction terminal · 33 quant systems · ML ensemble · Breeze + Angel One + Yahoo fusion</p>
+            <p class="disclaimer">For education &amp; research only — not investment advice. Markets involve risk; never trade capital you cannot afford to lose.</p>
         </footer>
     </div>
 
@@ -492,51 +401,34 @@
             </div>
             <div class="modal-body" id="modalBody">
                 <div class="strategy-detail">
-                    <div class="detail-row">
-                        <span class="label">Signal:</span>
-                        <span class="value" id="modalSignal">--</span>
-                    </div>
-                    <div class="detail-row">
-                        <span class="label">Strength:</span>
-                        <span class="value" id="modalStrength">--</span>
-                    </div>
-                    <div class="detail-row">
-                        <span class="label">Reason:</span>
-                        <span class="value" id="modalReason">--</span>
-                    </div>
-                    <div class="detail-row" id="modalLevelsRow" style="display:none;">
-                        <span class="label">Levels:</span>
-                        <span class="value" id="modalLevels">--</span>
-                    </div>
+                    <div class="detail-row"><span class="label">Signal</span><span class="value" id="modalSignal">—</span></div>
+                    <div class="detail-row"><span class="label">Strength</span><span class="value" id="modalStrength">—</span></div>
+                    <div class="detail-row"><span class="label">Thesis</span><span class="value" id="modalReason">—</span></div>
+                    <div class="detail-row" id="modalLevelsRow" style="display:none;"><span class="label">Levels</span><span class="value" id="modalLevels">—</span></div>
                 </div>
             </div>
         </div>
     </div>
+
     <!-- Trade Detail Modal -->
     <div id="tradeDetailModal" style="display:none; position:fixed; z-index:99999; left:0; top:0; width:100%; height:100%; background:rgba(0,0,0,0.75); backdrop-filter:blur(4px); align-items:center; justify-content:center;">
-        <div style="background:#131722; border:1px solid #2a2e39; border-radius:12px; width:92%; max-width:620px; box-shadow:0 20px 40px rgba(0,0,0,0.6); overflow:hidden; animation:modalIn 0.2s ease;">
-            <!-- Modal Header -->
-            <div style="display:flex; justify-content:space-between; align-items:center; padding:16px 20px; border-bottom:1px solid #2a2e39; background:rgba(255,255,255,0.02);">
+        <div style="background:#0c1220; border:1px solid #232d45; border-radius:14px; width:92%; max-width:620px; box-shadow:0 20px 40px rgba(0,0,0,0.6); overflow:hidden;">
+            <div style="display:flex; justify-content:space-between; align-items:center; padding:16px 20px; border-bottom:1px solid #232d45; background:rgba(255,255,255,0.02);">
                 <div style="display:flex; align-items:center; gap:10px;">
                     <span id="mdlActionBadge" style="font-size:0.95rem; font-weight:700; padding:4px 10px; border-radius:6px; background:#10b981; color:#fff;">BUY</span>
                     <h3 id="mdlTitle" style="margin:0; font-size:1.15rem; color:#fff; font-weight:700;">Trade Details</h3>
                 </div>
-                <button onclick="closeTradeModal()" style="background:none; border:none; color:#888; font-size:1.5rem; cursor:pointer; line-height:1; padding:0 4px;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='#888'">&times;</button>
+                <button onclick="closeTradeModal()" style="background:none; border:none; color:#888; font-size:1.5rem; cursor:pointer; line-height:1; padding:0 4px;">&times;</button>
             </div>
-
-            <!-- Modal Content Body -->
-            <div id="mdlBody" style="padding:20px; max-height:80vh; overflow-y:auto; font-size:0.88rem; color:#d1d4dc;">
-                <!-- Populated dynamically via JS -->
-            </div>
-
-            <!-- Modal Footer -->
-            <div style="padding:12px 20px; border-top:1px solid #2a2e39; text-align:right; background:rgba(255,255,255,0.01);">
-                <button onclick="closeTradeModal()" style="background:#2a2e39; color:#fff; border:none; padding:7px 18px; border-radius:6px; cursor:pointer; font-weight:600; font-size:0.85rem;" onmouseover="this.style.background='#363a45'" onmouseout="this.style.background='#2a2e39'">Close</button>
+            <div id="mdlBody" style="padding:20px; max-height:80vh; overflow-y:auto; font-size:0.88rem; color:#d1d4dc;"></div>
+            <div style="padding:12px 20px; border-top:1px solid #232d45; text-align:right; background:rgba(255,255,255,0.01);">
+                <button onclick="closeTradeModal()" style="background:#232d45; color:#fff; border:none; padding:7px 18px; border-radius:6px; cursor:pointer; font-weight:600; font-size:0.85rem;">Close</button>
             </div>
         </div>
     </div>
 
-    <script src="/static/app.js?v=1793341349"></script>
-</body>
+    <div class="toast" id="toast"></div>
 
+    <script src="/static/app.js?v=3.0"></script>
+</body>
 </html>

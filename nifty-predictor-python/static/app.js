@@ -22,6 +22,8 @@ let chart = null;
 
 let mainSeries = null;
 
+let volumeSeries = null;
+
 let socket = null;
 
 let allStrategies = [];
@@ -40,22 +42,48 @@ const API_BASE = '';
 
 // ============================================
 
+function safeBoot(name, fn) {
+    try {
+        const out = fn();
+        if (out && typeof out.catch === 'function') {
+            out.catch(e => console.error(`Boot step '${name}' failed:`, e));
+        }
+    } catch (e) {
+        console.error(`Boot step '${name}' failed:`, e);
+    }
+}
+
 function initApp() {
+    console.log("NiftyPro v3 boot");
+    // Isolated boot: one failing subsystem can never kill the terminal
+    safeBoot('chart', initChart);
+    safeBoot('socket', initWebSocket);
+    safeBoot('data', loadInitialData);
+    safeBoot('picks', loadStockPicks);
+    safeBoot('movers', loadMarketMovers);
+    safeBoot('loops', startDataUpdates);
+    safeBoot('clock', startClock);
+}
 
-    console.log("DEBUG: initApp called");
+function startClock() {
+    const el = document.getElementById('istClock');
+    const tick = () => {
+        if (!el) return;
+        el.textContent = new Date().toLocaleTimeString('en-IN', { hour12: false, timeZone: 'Asia/Kolkata' });
+    };
+    tick();
+    setInterval(tick, 1000);
+}
 
-    initChart();
-
-    initWebSocket();
-
-    loadInitialData();
-
-    loadStockPicks();  // Load stock picks
-
-    loadMarketMovers(); // Load market movers
-
-    startDataUpdates();
-
+let toastTimer = null;
+function toast(msg, ok) {
+    const el = document.getElementById('toast');
+    if (!el) return;
+    el.textContent = msg;
+    el.classList.toggle('ok', !!ok);
+    el.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove('show'), 3200);
 }
 
 
@@ -110,23 +138,27 @@ function initChart() {
 
         window.chart = LightweightCharts.createChart(container, {
 
-            width: container.clientWidth,
+            width: container.clientWidth || 800,
 
-            height: container.clientHeight,
+            height: container.clientHeight || 430,
 
             layout: {
 
-                background: { type: 'solid', color: '#1a1f2e' },
+                background: { type: 'solid', color: 'transparent' },
 
-                textColor: '#848e9c',
+                textColor: '#8b93a7',
+
+                fontFamily: "'JetBrains Mono', monospace",
+
+                fontSize: 11,
 
             },
 
             grid: {
 
-                vertLines: { color: '#2b313a' },
+                vertLines: { color: 'rgba(148, 163, 184, 0.07)' },
 
-                horzLines: { color: '#2b313a' },
+                horzLines: { color: 'rgba(148, 163, 184, 0.07)' },
 
             },
 
@@ -136,11 +168,23 @@ function initChart() {
 
                 secondsVisible: false,
 
+                borderColor: 'rgba(148, 163, 184, 0.2)',
+
+            },
+
+            rightPriceScale: {
+
+                borderColor: 'rgba(148, 163, 184, 0.2)',
+
             },
 
             crosshair: {
 
                 mode: LightweightCharts.CrosshairMode.Normal,
+
+                vertLine: { color: 'rgba(56, 189, 248, 0.55)', width: 1, style: 2, labelBackgroundColor: '#0ea5e9' },
+
+                horzLine: { color: 'rgba(56, 189, 248, 0.55)', width: 1, style: 2, labelBackgroundColor: '#0ea5e9' },
 
             },
 
@@ -542,6 +586,20 @@ function updateTickerDisplay(data) {
 
         }
 
+        // Mirror into scrolling tape (both copies)
+        const cv = idx === 'nifty' ? '.tape-nifty' : '.tape-bank';
+        const cc = idx === 'nifty' ? '.tape-nifty-chg' : '.tape-bank-chg';
+        if (tickerData && tickerData.ltp) {
+            document.querySelectorAll(cv).forEach(el => { el.textContent = parseFloat(tickerData.ltp).toFixed(2); });
+        }
+        if (tickerData && tickerData.change !== undefined) {
+            const chg = parseFloat(tickerData.change);
+            document.querySelectorAll(cc).forEach(el => {
+                el.textContent = `${chg >= 0 ? '+' : ''}${chg.toFixed(2)}%`;
+                el.style.color = chg >= 0 ? 'var(--up-color)' : 'var(--down-color)';
+            });
+        }
+
     });
 
 }
@@ -552,7 +610,11 @@ function updateFullAnalysis(data) {
 
     if (!data || data.error) {
 
-        console.log("DEBUG: Analysis has error or empty:", data?.error);
+        console.log("Analysis has error or empty:", data?.error);
+
+        if (data && data.error && data.error !== 'NO_DATA') {
+            toast(`Feed: ${data.message || data.error}`);
+        }
 
         return;
 
@@ -700,6 +762,12 @@ function updateProVerdict(verdict) {
             : verdict.direction === 'BEARISH' ? 'var(--down-color)' : 'var(--text-primary)';
     }
 
+    document.querySelectorAll('.tape-pro').forEach(el => {
+        el.textContent = `${verdict.direction || '--'} ${verdict.confidence || ''}%`.trim();
+        el.style.color = verdict.direction === 'BULLISH' ? 'var(--up-color)'
+            : verdict.direction === 'BEARISH' ? 'var(--down-color)' : 'var(--gold)';
+    });
+
 }
 
 
@@ -750,9 +818,40 @@ function updatePrediction(prediction) {
 
     if (peProb) peProb.textContent = `${prediction.pe_prob || 50}%`;
 
+    // Gauge ring + CE/PE bars + tape
+    const ce = prediction.ce_prob || 50, pe = prediction.pe_prob || 50;
+    const ring = document.getElementById('gaugeRing');
+    if (ring) {
+        const C = 351.8;
+        ring.style.strokeDashoffset = (C * (1 - ce / 100)).toFixed(1);
+        ring.style.stroke = prediction.direction === 'BULLISH' ? '#10b981'
+            : prediction.direction === 'BEARISH' ? '#f43f5e' : '#38bdf8';
+        ring.style.filter = `drop-shadow(0 0 8px ${prediction.direction === 'BULLISH' ? 'rgba(16,185,129,.5)'
+            : prediction.direction === 'BEARISH' ? 'rgba(244,63,94,.5)' : 'rgba(56,189,248,.5)'})`;
+    }
+    const ceBar = document.getElementById('ceBar');
+    const peBar = document.getElementById('peBar');
+    if (ceBar) ceBar.style.width = `${ce}%`;
+    if (peBar) peBar.style.width = `${pe}%`;
+    document.querySelectorAll('.tape-ai').forEach(el => {
+        el.textContent = prediction.direction || 'ANALYZING';
+        el.style.color = prediction.direction === 'BULLISH' ? 'var(--up-color)'
+            : prediction.direction === 'BEARISH' ? 'var(--down-color)' : 'var(--text-primary)';
+    });
+
 }
 
 
+
+function updateTabCounts() {
+    const cats = {};
+    (allStrategies || []).forEach(s => { cats[s.category || 'technical'] = (cats[s.category || 'technical'] || 0) + 1; });
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+    set('count-all', (allStrategies || []).length);
+    ['momentum', 'trend', 'volatility', 'volume', 'sentiment', 'support_resistance', 'pro'].forEach(c => set('count-' + c, cats[c] || 0));
+    const total = document.getElementById('stratTotal');
+    if (total) total.textContent = `${(allStrategies || []).length} SYSTEMS`;
+}
 
 function updateStrategiesGrid(strategies) {
 
@@ -760,11 +859,20 @@ function updateStrategiesGrid(strategies) {
 
     if (!grid) return;
 
+    updateTabCounts();
 
+    if (!strategies || strategies.length === 0) {
+        grid.innerHTML = '<div class="loading-picks">No signals in this view — quant engines still calibrating…</div>';
+        return;
+    }
 
-    grid.innerHTML = strategies.map(strategy => `
-
-        <div class="strategy-card ${strategy.signal}" onclick="showStrategyDetail('${strategy.name}')">
+    grid.innerHTML = strategies.map(strategy => {
+        const safeName = String(strategy.name || '').replace(/'/g, "\\'");
+        const isPro = strategy.category === 'pro';
+        const levels = (strategy.entry !== undefined && strategy.stop_loss !== undefined && strategy.target !== undefined)
+            ? `<span class="strat-levels">E ${strategy.entry} · SL ${strategy.stop_loss} · T ${strategy.target}</span>` : '';
+        return `
+        <div class="strategy-card ${strategy.signal}${isPro ? ' pro-glow' : ''}" onclick="showStrategyDetail('${safeName}')">
 
             <span class="strat-name">${strategy.name}</span>
 
@@ -775,12 +883,11 @@ function updateStrategiesGrid(strategies) {
                 <span class="strat-strength">${strategy.strength}%</span>
 
             </div>
-
+            ${levels}
             <span class="strat-category">${strategy.category || 'technical'}</span>
 
-        </div>
-
-    `).join('');
+        </div>`;
+    }).join('');
 
 }
 
@@ -1114,6 +1221,21 @@ function updateSentiment(sentiment, vixData) {
 
     }
 
+    // Tape mirrors + top VIX card
+    const setTape = (cls, val, color) => document.querySelectorAll(cls).forEach(el => {
+        el.textContent = val;
+        if (color) el.style.color = color;
+    });
+    if (vixValue) {
+        setTape('.tape-vix', vixValue.toFixed(2));
+        const tv = document.getElementById('tapeVixTop');
+        if (tv) tv.textContent = vixValue.toFixed(2);
+    }
+    setTape('.tape-pcr', (sentiment.pcr || 1.0).toFixed(2));
+    const fii = sentiment.fii_net || 0, dii = sentiment.dii_net || 0;
+    setTape('.tape-fii', `${fii > 0 ? '+' : ''}${fii}`, fii >= 0 ? 'var(--up-color)' : 'var(--down-color)');
+    setTape('.tape-dii', `${dii > 0 ? '+' : ''}${dii}`, dii >= 0 ? 'var(--up-color)' : 'var(--down-color)');
+
 }
 
 
@@ -1278,29 +1400,65 @@ window.createMainSeries = function () {
 
 
 
+        const LW = LightweightCharts;
+
+        // lightweight-charts v5 API: chart.addSeries(SeriesType, options)
         const candleOptions = {
 
-            upColor: '#10b981', downColor: '#ef4444', borderVisible: false,
+            upColor: '#10b981', downColor: '#f43f5e', borderVisible: false,
 
-            wickUpColor: '#10b981', wickDownColor: '#ef4444',
+            wickUpColor: '#10b981', wickDownColor: '#f43f5e',
+
+            priceFormat: { type: 'price', precision: 2, minMove: 0.01 },
 
         };
 
 
 
-        const lineOptions = { color: '#3b82f6', lineWidth: 2 };
+        const lineOptions = {
+
+            color: '#38bdf8', lineWidth: 2,
+
+            priceFormat: { type: 'price', precision: 2, minMove: 0.01 },
+
+        };
 
 
 
         if (currentChartType === 'candle' || currentChartType === 'candlestick') {
 
-            mainSeries = chart.addCandlestickSeries(candleOptions);
+            mainSeries = chart.addSeries(LW.CandlestickSeries, candleOptions);
 
         } else {
 
-            mainSeries = chart.addLineSeries(lineOptions);
+            mainSeries = chart.addSeries(LW.LineSeries, lineOptions);
 
         }
+
+
+
+        // Volume histogram on overlay scale
+        if (volumeSeries) {
+
+            try { chart.removeSeries(volumeSeries); } catch (e) { }
+
+            volumeSeries = null;
+
+        }
+
+        volumeSeries = chart.addSeries(LW.HistogramSeries, {
+
+            priceFormat: { type: 'volume' },
+
+            priceScaleId: '',
+
+            lastValueVisible: false,
+
+            priceLineVisible: false,
+
+        });
+
+        chart.priceScale('').applyOptions({ scaleMargins: { top: 0.84, bottom: 0 } });
 
 
 
@@ -1376,13 +1534,15 @@ window.updateChart = function (candles) {
 
         const parsed = [];
 
+        const vols = [];
+
         const seen = new Set();
 
         for (const c of candles) {
 
-            const t = window.parseCandleTime(c.time || c.timestamp);
+            const t = window.parseCandleTime(c.time || c.timestamp || c.datetime);
 
-            if (seen.has(t)) continue;
+            if (!t || seen.has(t)) continue;
 
             seen.add(t);
 
@@ -1394,6 +1554,10 @@ window.updateChart = function (candles) {
 
             const close = parseFloat(c.close || 0);
 
+            const vol = parseFloat(c.volume || 0);
+
+            if (!(open > 0 && high > 0 && low > 0 && close > 0)) continue;
+
             if (currentChartType === 'candle' || currentChartType === 'candlestick') {
 
                 parsed.push({ time: t, open, high, low, close });
@@ -1404,15 +1568,37 @@ window.updateChart = function (candles) {
 
             }
 
+            vols.push({ time: t, value: vol, color: close >= open ? 'rgba(16,185,129,0.5)' : 'rgba(244,63,94,0.5)' });
+
         }
 
         parsed.sort((a, b) => a.time - b.time);
 
+        vols.sort((a, b) => a.time - b.time);
 
+
+
+        if (parsed.length === 0) {
+
+            console.warn('updateChart: no valid candles after parse');
+
+            return;
+
+        }
 
         mainSeries.setData(parsed);
 
+        if (volumeSeries) {
+
+            try { volumeSeries.setData(vols); } catch (e) { console.warn('volume setData failed', e); }
+
+        }
+
         chart.timeScale().fitContent();
+
+        const loader = document.getElementById('chartLoader');
+
+        if (loader) loader.classList.add('hide');
 
     } catch (e) {
 
@@ -1850,7 +2036,7 @@ window.changeTimeframe = function (tf) {
 
 
 
-window.setChartType = function (type) {
+window.setChartType = function (type, el) {
 
     if (currentChartType === type) return;
 
@@ -1864,6 +2050,8 @@ window.setChartType = function (type) {
 
     });
 
+    if (el) el.classList.add('active');
+
 
 
     createMainSeries();
@@ -1874,13 +2062,20 @@ window.setChartType = function (type) {
 
 
 
-window.filterStrategies = function (category) {
+window.filterStrategies = function (category, el) {
 
     document.querySelectorAll('.strat-tab').forEach(tab => {
 
         tab.classList.remove('active');
 
     });
+
+    if (el) {
+        el.classList.add('active');
+    } else {
+        const match = document.querySelector(`.strat-tab[data-category="${category}"]`);
+        if (match) match.classList.add('active');
+    }
 
 
 
@@ -2282,7 +2477,7 @@ function refreshStockPicks() {
 
     if (btn) {
 
-        btn.textContent = '⏳ Loading...';
+        btn.textContent = '… Loading';
 
         btn.disabled = true;
 
@@ -2296,7 +2491,7 @@ function refreshStockPicks() {
 
             if (btn) {
 
-                btn.textContent = '🔄 Refresh Picks';
+                btn.textContent = '↻ Refresh';
 
                 btn.disabled = false;
 
@@ -2328,9 +2523,7 @@ function showStockDetail(code) {
 
     console.log(`Show detail for: ${code}`);
 
-    // Could open a modal with detailed stock analysis
-
-    alert(`Stock Detail: ${code}\n\nThis would show detailed analysis, indicators, and chart for the stock.`);
+    toast(`${code} — deep-dive panel coming to this terminal soon`, true);
 
 }
 
