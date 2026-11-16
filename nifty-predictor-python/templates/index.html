@@ -231,6 +231,41 @@
                     </div>
                 </div>
 
+                <!-- ── ELITE TRADE SETUP ── -->
+                <div class="card elite-card" id="eliteSetupCard">
+                    <div class="card-head split">
+                        <h3><span class="head-icon elite">⬢</span> ELITE TRADE SETUP <span class="strat-total" id="setupIndex">NIFTY</span></h3>
+                        <button class="refresh-btn" onclick="loadEliteSetup(true)">↻ Re-grade Setup</button>
+                    </div>
+                    <div class="elite-grid">
+                        <div class="elite-left">
+                            <div class="grade-banner" id="setupGradeBanner"><div class="loading-picks">Grading live setup…</div></div>
+                            <div class="tl-legend" id="setupLegend"></div>
+                            <div class="elite-chart-wrap"><div id="setupChart"></div></div>
+                        </div>
+                        <div class="elite-right">
+                            <div class="elite-panel">
+                                <h4>✓ 8-POINT CHECKLIST</h4>
+                                <div id="setupChecklist"><div class="loading-picks">—</div></div>
+                            </div>
+                            <div class="elite-panel">
+                                <h4>◎ PROJECTION — WHERE IT GOES</h4>
+                                <div id="setupProjection"><div class="loading-picks">—</div></div>
+                            </div>
+                            <div class="elite-duo">
+                                <div class="elite-panel">
+                                    <h4>₨ POSITION SIZE</h4>
+                                    <div id="setupSizing"><div class="loading-picks">—</div></div>
+                                </div>
+                                <div class="elite-panel">
+                                    <h4>✚ TA CROSS-CHECK</h4>
+                                    <div id="setupTA"><div class="loading-picks">—</div></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- ── RECENT TRADES: NIFTY ── -->
                 <div class="card trades-card">
                     <div class="card-head split">
@@ -326,6 +361,7 @@
                         <div class="movers-list" id="topLosers"><div class="loading-picks">Loading…</div></div>
                     </div>
                 </div>
+                <div class="intel-strip" id="intelStrip"><div class="loading-picks">Connecting free intel feeds…</div></div>
             </section>
 
             <!-- ══════════ SIDE RAIL ══════════ -->

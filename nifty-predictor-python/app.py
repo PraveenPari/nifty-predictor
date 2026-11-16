@@ -202,6 +202,16 @@ except Exception as e:
 
 from accuracy_tracker import accuracy_tracker  # noqa: E402
 from trade_analytics import analyze_recent_trades  # noqa: E402
+try:
+    from trade_setup_engine import (  # noqa: E402
+        compute_trendlines, build_projection, grade_setup, build_checklist,
+        position_sizer, ta_consensus, atr as engine_atr, TA_AVAILABLE,
+    )
+    SETUP_ENGINE_AVAILABLE = True
+except Exception as e:  # pragma: no cover
+    print(f"[WARN] trade_setup_engine unavailable: {e}")
+    SETUP_ENGINE_AVAILABLE = False
+    TA_AVAILABLE = False
 from secrets_manager import breeze_login_url, safe_status  # noqa: E402
 
 # Optional: market simulator (powers DEMO_MODE)
@@ -938,6 +948,303 @@ def recent_trades():
     if not candles or len(candles) < 10:
         return jsonify({'error': 'INSUFFICIENT_DATA'}), 503
     return jsonify(analyze_recent_trades(candles, index, hours))
+
+
+# ---------------------------------------------------------------------------
+# Routes — elite engine: forensics, intel, live setup
+# ---------------------------------------------------------------------------
+
+def _locate_entry_candle(candles, trade_time, candle_idx):
+    """Find entry bar: match trade timestamp first, fall back to stored index."""
+    if trade_time:
+        t = str(trade_time).strip()
+        if t:
+            for i, c in enumerate(candles):
+                for k in ('time', 'datetime', 'timestamp'):
+                    v = c.get(k)
+                    if v is None:
+                        continue
+                    s = str(v)
+                    if s == t or t in s or s in t:
+                        return i
+    try:
+        ci = int(candle_idx)
+        if 0 <= ci < len(candles):
+            return ci
+    except (TypeError, ValueError):
+        pass
+    return len(candles) - 1
+
+
+def _tl_window_payload(tl, window_start):
+    """Trendline → window-relative payload the chart can draw directly."""
+    return {
+        'name': tl['name'], 'color': tl['color'], 'width': tl['width'],
+        'slope_pct': tl['slope_pct'], 'touch_count': tl['touch_count'],
+        'broken': tl['broken'], 'current_value': tl['current_value'],
+        'anchor_bar': tl['anchor_bar'] - window_start,
+        'anchor_value': tl['anchor_value'],
+        'slope_per_bar': tl['slope_per_bar'],
+    }
+
+
+def _outcome_lesson(result, direction, first_target_hit, first_sl_hit, rr):
+    if result == 'WIN':
+        if first_target_hit is not None and (first_sl_hit is None or first_target_hit < first_sl_hit):
+            return ('A', 'Textbook execution — target hit before any heat. '
+                    'This is the setup to repeat and size up on.')
+        return ('B', 'Profitable, but price tested the stop zone first. '
+                'Edge intact — consider a trigger candle before entry next time.')
+    if result == 'FLAT':
+        return ('C', 'Chop — neither side paid. Capital preserved; '
+                'in range regimes, wait for the range edge, not the middle.')
+    if result == 'ACTIVE':
+        return ('—', 'Trade still live — manage per plan, do not move the stop.')
+    # LOSS
+    if first_sl_hit is not None and (first_target_hit is None or first_sl_hit < first_target_hit):
+        return ('D', 'Invalidation hit first — the stop did its job. '
+                'Review: was the trigger an A-setup? One loss means nothing; the process is everything.')
+    return ('D', 'Loss recorded. Re-check: thin RR (<1.5) or counter-trend entries '
+            'are the two killers — the elite checklist now blocks both.')
+
+
+@app.route('/api/trade-forensics')
+def trade_forensics():
+    """
+    Full replay of one past trade: candle window, trade-time trendlines,
+    entry/target/SL/exit markers, the model's projection, and graded outcome.
+    """
+    if not SETUP_ENGINE_AVAILABLE:
+        return jsonify({'error': 'ENGINE_UNAVAILABLE'}), 503
+    index = request.args.get('index', 'nifty')
+    candles = get_candles_hybrid(index, '5m', 1)
+    if not candles or len(candles) < 20:
+        return jsonify({'error': 'INSUFFICIENT_DATA'}), 503
+    try:
+        entry = float(request.args.get('entry', 0))
+        stop_loss = float(request.args.get('stop_loss', 0))
+        target = float(request.args.get('target', 0))
+        exit_px = float(request.args.get('exit', 0) or 0)
+        points = float(request.args.get('points', 0) or 0)
+        pnl = float(request.args.get('pnl', request.args.get('pnl_per_lot', 0) or 0) or 0)
+    except ValueError:
+        return jsonify({'error': 'BAD_LEVELS'}), 400
+    if entry <= 0:
+        return jsonify({'error': 'BAD_LEVELS'}), 400
+    direction = (request.args.get('direction', 'BULLISH') or 'BULLISH').upper()
+    if direction in ('LONG', 'CE', 'CALL'):
+        direction = 'BULLISH'
+    elif direction in ('SHORT', 'PE', 'PUT'):
+        direction = 'BEARISH'
+    result = (request.args.get('result', 'ACTIVE') or 'ACTIVE').upper()
+
+    entry_i = _locate_entry_candle(candles, request.args.get('time'), request.args.get('candle_idx'))
+    pre = candles[:entry_i + 1]
+    trendlines = compute_trendlines(pre, lookback=min(60, len(pre)), extend_bars=14)
+    projection = build_projection(pre, direction, entry, stop_loss, target, trendlines)
+
+    # Forward scan: first target / SL touch after entry
+    first_target_hit, first_sl_hit = None, None
+    for j in range(entry_i + 1, len(candles)):
+        try:
+            h, l = float(candles[j]['high']), float(candles[j]['low'])
+        except (KeyError, ValueError, TypeError):
+            continue
+        if direction == 'BULLISH':
+            if first_target_hit is None and target and h >= target:
+                first_target_hit = j
+            if first_sl_hit is None and stop_loss and l <= stop_loss:
+                first_sl_hit = j
+        else:
+            if first_target_hit is None and target and l <= target:
+                first_target_hit = j
+            if first_sl_hit is None and stop_loss and h >= stop_loss:
+                first_sl_hit = j
+        if first_target_hit is not None and first_sl_hit is not None:
+            break
+
+    start = max(0, entry_i - 90)
+    window = candles[start:start + 200]
+    rel = lambda j: (j - start) if j is not None else None  # noqa: E731
+
+    bull = direction == 'BULLISH'
+    markers = [{
+        'bar': rel(entry_i), 'position': 'belowBar' if bull else 'aboveBar',
+        'color': '#f59e0b', 'shape': 'arrowUp' if bull else 'arrowDown',
+        'text': f"ENTRY {entry:.1f}",
+    }]
+    end_j = len(window) - 1 + start
+    exit_j = first_target_hit if result == 'WIN' and first_target_hit is not None else \
+        (first_sl_hit if result == 'LOSS' and first_sl_hit is not None else end_j)
+    exit_color = {'WIN': '#10b981', 'LOSS': '#ef4444'}.get(result, '#3b82f6')
+    markers.append({
+        'bar': rel(min(exit_j, start + len(window) - 1)),
+        'position': 'aboveBar' if bull else 'belowBar',
+        'color': exit_color, 'shape': 'circle',
+        'text': f"{result} {exit_px:.1f}" if exit_px else result,
+    })
+
+    grade, lesson = _outcome_lesson(result, direction, first_target_hit, first_sl_hit,
+                                    projection.get('risk_reward', 0))
+
+    return jsonify({
+        'index': index, 'direction': direction, 'result': result,
+        'entry': entry, 'stop_loss': stop_loss, 'target': target,
+        'exit': exit_px, 'points': points, 'pnl_per_lot': pnl,
+        'entry_bar': rel(entry_i),
+        'candles': window,
+        'markers': markers,
+        'trendlines': [_tl_window_payload(t, start) for t in trendlines],
+        'projection': projection,
+        'outcome': {
+            'grade': grade, 'lesson': lesson,
+            'target_hit_first': first_target_hit is not None and (
+                first_sl_hit is None or first_target_hit < first_sl_hit),
+            'bars_to_target': (first_target_hit - entry_i) if first_target_hit else None,
+            'bars_to_stop': (first_sl_hit - entry_i) if first_sl_hit else None,
+        },
+        'timestamp': datetime.now().isoformat(),
+    })
+
+
+@app.route('/api/market-intel')
+def market_intel():
+    """
+    Free-source market intelligence: MoneyControl movers + summary, FII/DII,
+    advance/decline breadth. Never 500s — degrades gracefully to demo/cached.
+    """
+    intel = {
+        'gainers': [], 'losers': [], 'summary': {}, 'breadth': {},
+        'fii_dii': {}, 'sources': [], 'demo': DEMO_MODE,
+        'timestamp': datetime.now().isoformat(), 'note': '',
+    }
+    if DEMO_MODE and SIM_AVAILABLE:
+        try:
+            sim = get_simulator('nifty')
+            sent = sim.get_market_sentiment()
+            px = sim.get_current_price()['ltp']
+            # Deterministic demo breadth board (clearly labelled demo)
+            board = ['RELIANCE', 'HDFCBANK', 'INFY', 'ICICIBANK', 'TCS', 'SBIN',
+                     'TATAMOTORS', 'AXISBANK', 'KOTAKBANK', 'LT']
+            movers = []
+            for i, sym in enumerate(board):
+                drift = ((px * (i + 3) * 7919) % 1000) / 1000  # 0..1 deterministic
+                chg = round((drift - 0.45) * 6, 2)
+                movers.append({'symbol': sym, 'ltp': round(px * (0.02 + i * 0.011), 2),
+                               'change_pct': chg, 'volume': int(1e6 + drift * 9e6)})
+            movers.sort(key=lambda m: m['change_pct'], reverse=True)
+            intel['gainers'] = movers[:5]
+            intel['losers'] = list(reversed(movers[-5:]))
+            intel['breadth'] = {'advances': sent.get('advances', 0),
+                                'declines': sent.get('declines', 0),
+                                'undecided': sent.get('undecided', 0)}
+            intel['fii_dii'] = {'fii_net': sent.get('fii_net', 0),
+                                'dii_net': sent.get('dii_net', 0)}
+            intel['sources'] = ['Demo Simulator']
+            intel['note'] = 'Demo feed — connect live data for real MoneyControl intel.'
+            return jsonify(intel)
+        except Exception as e:
+            intel['note'] = f'Demo intel unavailable: {e}'
+            return jsonify(intel)
+
+    # Live: MoneyControl with a hard time budget so the request can't hang
+    if MC_AVAILABLE:
+        try:
+            from concurrent.futures import ThreadPoolExecutor
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                fut = pool.submit(get_market_movers)
+                mc = fut.result(timeout=14)
+            if isinstance(mc, dict):
+                intel['gainers'] = mc.get('gainers', []) or []
+                intel['losers'] = mc.get('losers', []) or []
+                if intel['gainers'] or intel['losers']:
+                    intel['sources'].append('MoneyControl')
+        except Exception as e:
+            intel['note'] = f'MoneyControl unreachable ({e}); showing alternate sources. '
+    try:
+        if YAHOO_AVAILABLE:
+            fii = yahoo_manager.get_fii_dii()
+            if fii:
+                intel['fii_dii'] = fii
+                intel['sources'].append('Yahoo/FII-DII')
+    except Exception:
+        pass
+    if not intel['sources']:
+        intel['note'] += 'All free intel sources unreachable right now — retry shortly.'
+    return jsonify(intel)
+
+
+@app.route('/api/live-trade-setup')
+def live_trade_setup():
+    """
+    Buffett-grade live setup: elite checklist, A+/A/B/C grade, projection cone,
+    trendlines + position sizing for the current market state.
+    """
+    if not SETUP_ENGINE_AVAILABLE:
+        return jsonify({'error': 'ENGINE_UNAVAILABLE'}), 503
+    index = _norm_index(request.args.get('index', 'nifty'))
+    try:
+        capital = max(10000, min(100000000, float(request.args.get('capital', 200000))))
+    except ValueError:
+        capital = 200000
+
+    data = get_market_analysis(index)
+    if 'error' in data:
+        return jsonify(data), 503
+    candles = get_candles_hybrid(index, '5m', 5)
+    if not candles or len(candles) < 30:
+        return jsonify({'error': 'INSUFFICIENT_DATA'}), 503
+
+    rec = data.get('trade_recommendation', {})
+    ind = data.get('indicators', {}) or {}
+    sent = data.get('sentiment', {}) or {}
+    pred = data.get('prediction', {}) or {}
+    price = float(rec.get('entry') or (data.get('price_data') or {}).get('ltp') or candles[-1]['close'])
+
+    direction = (rec.get('direction') or pred.get('direction') or 'NEUTRAL').upper()
+    if direction not in ('BULLISH', 'BEARISH'):
+        direction = 'BULLISH' if pred.get('ce_prob', 50) >= pred.get('pe_prob', 50) else 'BEARISH'
+    entry = float(rec.get('entry') or price)
+    stop_loss = float(rec.get('stop_loss') or price * 0.995)
+    target = float(rec.get('target') or price * 1.015)
+    rr = float(rec.get('risk_reward') or 0)
+
+    adx = ind.get('adx') or {}
+    adx_v = adx.get('adx', 0) or 0
+    regime = 'TRENDING' if adx_v >= 25 else ('TRANSITION' if adx_v >= 18 else 'RANGE')
+    piv = ind.get('pivot_points') or {}
+    supports = [piv[k] for k in ('s1', 's2', 's3') if piv.get(k)]
+    resistances = [piv[k] for k in ('r1', 'r2', 'r3') if piv.get(k)]
+
+    trendlines = compute_trendlines(candles[-120:], lookback=60, extend_bars=14)
+    start = len(candles) - min(120, len(candles))
+    tav = ta_consensus(candles)
+    checklist = build_checklist(direction, price, ind, sent, regime, supports, resistances)
+    if not rr:
+        risk = abs(entry - stop_loss) or 1
+        rr = round(abs(target - entry) / risk, 2)
+    grade = grade_setup(checklist, rr, tav)
+    projection = build_projection(candles, direction, entry, stop_loss, target, trendlines)
+
+    risk_map = {'A+': 2.0, 'A': 1.0, 'B': 0.5, 'C': 0.0}
+    sizing = position_sizer(capital, risk_map.get(grade['grade'], 0.5),
+                            entry, stop_loss, LOT_SIZES.get(index, 25))
+
+    return jsonify({
+        'index': index, 'price': round(price, 2), 'direction': direction,
+        'confidence': rec.get('confidence', pred.get('confidence', 50)),
+        'regime': regime, 'adx': round(adx_v, 1),
+        'levels': {'entry': round(entry, 2), 'stop_loss': round(stop_loss, 2),
+                   'target': round(target, 2), 'risk_reward': rr,
+                   'supports': supports, 'resistances': resistances},
+        'grade': grade,
+        'projection': projection,
+        'sizing': sizing,
+        'ta_consensus': tav,
+        'trendlines': [_tl_window_payload(t, 0) for t in trendlines],
+        'candles': candles[start:],
+        'timestamp': datetime.now().isoformat(),
+    })
 
 
 # ---------------------------------------------------------------------------

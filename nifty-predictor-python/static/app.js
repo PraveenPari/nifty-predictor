@@ -2536,4 +2536,358 @@ setInterval(loadStockPicks, 60000);
 setInterval(loadMarketMovers, 120000);
 
 
+// ============================================
+// ELITE ENGINE — replay charts, live setup, market intel
+// ============================================
+
+function eliteTheme() {
+    return {
+        layout: {
+            background: { type: 'solid', color: 'transparent' },
+            textColor: '#8b93a7',
+            fontFamily: "'JetBrains Mono', monospace",
+            fontSize: 11,
+        },
+        grid: {
+            vertLines: { color: 'rgba(148, 163, 184, 0.07)' },
+            horzLines: { color: 'rgba(148, 163, 184, 0.07)' },
+        },
+        timeScale: { timeVisible: true, secondsVisible: false, borderColor: 'rgba(148, 163, 184, 0.2)' },
+        rightPriceScale: { borderColor: 'rgba(148, 163, 184, 0.2)' },
+        crosshair: {
+            mode: window.LightweightCharts.CrosshairMode.Normal,
+            vertLine: { color: 'rgba(56, 189, 248, 0.55)', width: 1, style: 2, labelBackgroundColor: '#0ea5e9' },
+            horzLine: { color: 'rgba(56, 189, 248, 0.55)', width: 1, style: 2, labelBackgroundColor: '#0ea5e9' },
+        },
+    };
+}
+
+// Standalone replay chart: candles + volume + trendlines + levels + markers.
+// payload: {candles, trendlines:[{anchor_bar,anchor_value,slope_per_bar,...}], markers:[{bar,...}], levels:{entry,stop_loss,target,zone}}
+window.buildReplayChart = function (container, payload, opts) {
+    opts = opts || {};
+    if (!container || !window.LightweightCharts) return null;
+    if (container._eliteChart) {
+        try { container._eliteChart.remove(); } catch (e) { /* noop */ }
+        container._eliteChart = null;
+    }
+    const LW = window.LightweightCharts;
+    const parsed = [], vols = [];
+    const seen = new Set();
+    (payload.candles || []).forEach(c => {
+        const t = window.parseCandleTime(c.time !== undefined ? c.time : (c.timestamp !== undefined ? c.timestamp : c.datetime));
+        if (!t || seen.has(t)) return;
+        seen.add(t);
+        const o = +c.open, h = +c.high, l = +c.low, cl = +c.close, v = +(c.volume || 0);
+        if (!(o > 0 && h > 0 && l > 0 && cl > 0)) return;
+        parsed.push({ time: t, open: o, high: h, low: l, close: cl });
+        vols.push({ time: t, value: v, color: cl >= o ? 'rgba(16,185,129,0.45)' : 'rgba(244,63,94,0.45)' });
+    });
+    parsed.sort((a, b) => a.time - b.time);
+    vols.sort((a, b) => a.time - b.time);
+    if (!parsed.length) {
+        container.innerHTML = '<div class="loading-picks">No chart data</div>';
+        return null;
+    }
+    container.innerHTML = '';
+    const chart = LW.createChart(container, Object.assign({
+        width: container.clientWidth || 700,
+        height: opts.height || 340,
+    }, eliteTheme()));
+    const candles = chart.addSeries(LW.CandlestickSeries, {
+        upColor: '#10b981', downColor: '#f43f5e', borderVisible: false,
+        wickUpColor: '#10b981', wickDownColor: '#f43f5e',
+        priceFormat: { type: 'price', precision: 2, minMove: 0.01 },
+    });
+    candles.setData(parsed);
+    const vol = chart.addSeries(LW.HistogramSeries, {
+        priceFormat: { type: 'volume' }, priceScaleId: '',
+        lastValueVisible: false, priceLineVisible: false,
+    });
+    try { vol.setData(vols); } catch (e) { /* noop */ }
+    chart.priceScale('').applyOptions({ scaleMargins: { top: 0.86, bottom: 0 } });
+
+    const T = parsed.map(p => p.time);
+    const diffs = [];
+    for (let i = 1; i < T.length; i++) { const d = T[i] - T[i - 1]; if (d > 0) diffs.push(d); }
+    diffs.sort((a, b) => a - b);
+    const step = diffs.length ? diffs[Math.floor(diffs.length / 2)] : 300;
+    const ext = (opts.extendBars !== undefined) ? opts.extendBars : 10;
+
+    (payload.trendlines || []).forEach(tl => {
+        try {
+            const pts = [];
+            for (let b = 0; b < T.length; b++) {
+                pts.push({ time: T[b], value: +(tl.anchor_value + tl.slope_per_bar * (b - tl.anchor_bar)).toFixed(2) });
+            }
+            for (let k = 1; k <= ext; k++) {
+                pts.push({ time: T[T.length - 1] + k * step, value: +(tl.anchor_value + tl.slope_per_bar * ((T.length - 1 + k) - tl.anchor_bar)).toFixed(2) });
+            }
+            const ls = chart.addSeries(LW.LineSeries, {
+                color: tl.color || '#38bdf8', lineWidth: tl.width || 2, lineStyle: 2,
+                lastValueVisible: false, priceLineVisible: false, title: tl.name || '',
+            });
+            ls.setData(pts);
+        } catch (e) { console.warn('trendline draw failed', e); }
+    });
+
+    const lv = payload.levels || {};
+    const lines = [];
+    if (lv.entry) lines.push({ p: lv.entry, c: '#f59e0b', t: 'ENTRY ' + lv.entry });
+    if (lv.target) lines.push({ p: lv.target, c: '#10b981', t: 'TARGET ' + lv.target });
+    if (lv.stop_loss) lines.push({ p: lv.stop_loss, c: '#ef4444', t: 'STOP ' + lv.stop_loss });
+    if (lv.zone && lv.zone.length === 2) {
+        lines.push({ p: lv.zone[0], c: 'rgba(56,189,248,0.8)', t: 'ZONE', d: 2 });
+        lines.push({ p: lv.zone[1], c: 'rgba(56,189,248,0.8)', t: 'ZONE', d: 2 });
+    }
+    lines.forEach(L => {
+        try {
+            candles.createPriceLine({ price: L.p, color: L.c, lineWidth: 1, lineStyle: (L.d || 0), title: L.t, axisLabelVisible: true });
+        } catch (e) { /* noop */ }
+    });
+
+    const marks = [];
+    (payload.markers || []).forEach(m => {
+        const b = Math.max(0, Math.min(T.length - 1, m.bar | 0));
+        marks.push({ time: T[b], position: m.position || 'belowBar', color: m.color || '#f59e0b', shape: m.shape || 'circle', text: m.text || '' });
+    });
+    try { candles.setMarkers(marks); } catch (e) { /* noop */ }
+    chart.timeScale().fitContent();
+    try {
+        new ResizeObserver(() => { try { chart.applyOptions({ width: container.clientWidth }); } catch (e) { /* noop */ } }).observe(container);
+    } catch (e) { /* noop */ }
+    container._eliteChart = chart;
+    return chart;
+};
+
+
+// ---------- Trade forensics ----------
+
+async function loadForensics(prefix, t) {
+    const wrap = document.getElementById('forensicWrap');
+    if (!wrap) return;
+    wrap.innerHTML = '<div class="loading-picks">▣ Rebuilding trade tape — trendlines + projection…</div>';
+    try {
+        const q = new URLSearchParams({
+            index: prefix, candle_idx: (t.candle_idx !== undefined && t.candle_idx !== null) ? t.candle_idx : '',
+            direction: t.direction || '', entry: t.entry, stop_loss: t.stop_loss, target: t.target,
+            exit: (t.exit !== undefined && t.exit !== null) ? t.exit : '',
+            result: t.result || '', points: t.points || 0, pnl: t.pnl_per_lot || 0, time: t.time || '',
+        });
+        const r = await fetch(`${API_BASE}/api/trade-forensics?${q.toString()}`);
+        const d = await r.json();
+        if (d.error) throw new Error(d.error);
+        const proj = d.projection || {}, out = d.outcome || {};
+        const gradeColors = { A: '#10b981', B: '#3b82f6', C: '#f59e0b', D: '#ef4444', '—': '#888' };
+        const gcol = gradeColors[out.grade] || '#888';
+        wrap.innerHTML = `
+            <h4 class="forensic-title">▣ FORENSIC REPLAY — TRADE-TIME TRENDLINES + PROJECTION CONE</h4>
+            <div class="tl-legend">${(d.trendlines || []).map(tl =>
+                `<span class="tl-chip"><i style="background:${tl.color}"></i>${tl.name} · ${tl.touch_count} touches · ${tl.broken ? '<b class="bear">BROKEN</b>' : '<b class="bull">HOLDING</b>'}</span>`
+            ).join('')}</div>
+            <div id="forensicChart" class="forensic-chart"></div>
+            <div class="forensic-grid">
+                <div class="forensic-card">
+                    <h5>WHERE IT WAS HEADED <span class="prob-pill">${proj.probability || '—'}%</span></h5>
+                    <div class="proj-zone">TARGET ZONE <b>₹${(proj.target_zone || []).join(' – ₹')}</b></div>
+                    <div class="proj-meta">RR 1:${proj.risk_reward} · ATR ${proj.atr} · Horizon ${proj.horizon || ''}</div>
+                    <ul>${(proj.reasoning || []).map(x => `<li>${x}</li>`).join('')}</ul>
+                </div>
+                <div class="forensic-card">
+                    <h5>TRADE GRADE <span class="grade-pill" style="background:${gcol}22;color:${gcol};border-color:${gcol}">${out.grade || '—'}</span></h5>
+                    <p class="lesson">${out.lesson || ''}</p>
+                    <div class="proj-meta">
+                        ${out.bars_to_target != null ? `Target touched in <b>${out.bars_to_target}</b> bars · ` : 'Target never touched · '}
+                        ${out.bars_to_stop != null ? `Stop touched in <b>${out.bars_to_stop}</b> bars` : 'Stop never touched'}
+                        ${out.target_hit_first ? ' · <b class="bull">TARGET FIRST ✓</b>' : ''}
+                    </div>
+                </div>
+            </div>`;
+        window.buildReplayChart(document.getElementById('forensicChart'), {
+            candles: d.candles, trendlines: d.trendlines, markers: d.markers,
+            levels: { entry: d.entry, stop_loss: d.stop_loss, target: d.target, zone: proj.target_zone },
+        }, { height: 360, extendBars: 12 });
+    } catch (e) {
+        wrap.innerHTML = `<div class="loading-picks">Replay unavailable (${e.message})</div>`;
+    }
+}
+
+(function wrapTradeModal() {
+    if (!window.showTradeDetails || window.showTradeDetails._eliteWrapped) return;
+    const origShow = window.showTradeDetails;
+    window.showTradeDetails = function (prefix, idx) {
+        try {
+            const old = document.getElementById('forensicChart');
+            if (old && old._eliteChart) { try { old._eliteChart.remove(); } catch (e) { /* noop */ } old._eliteChart = null; }
+        } catch (e) { /* noop */ }
+        origShow(prefix, idx);
+        try {
+            const body = document.getElementById('mdlBody');
+            const list = prefix === 'banknifty' ? window.currentBankniftyTrades : window.currentNiftyTrades;
+            const t = list && list[idx];
+            if (!body || !t) return;
+            const wrap = document.createElement('div');
+            wrap.id = 'forensicWrap';
+            body.appendChild(wrap);
+            loadForensics(prefix, t);
+        } catch (e) { console.warn('forensics attach failed', e); }
+    };
+    window.showTradeDetails._eliteWrapped = true;
+    if (window.closeTradeModal && !window.closeTradeModal._eliteWrapped) {
+        const origClose = window.closeTradeModal;
+        window.closeTradeModal = function () {
+            try {
+                const fc = document.getElementById('forensicChart');
+                if (fc && fc._eliteChart) { try { fc._eliteChart.remove(); } catch (e) { /* noop */ } fc._eliteChart = null; }
+            } catch (e) { /* noop */ }
+            origClose();
+        };
+        window.closeTradeModal._eliteWrapped = true;
+    }
+})();
+
+
+// ---------- Elite live setup ----------
+
+async function loadEliteSetup(manual) {
+    const idx = (typeof currentIndex !== 'undefined') ? currentIndex : 'nifty';
+    const banner = document.getElementById('setupGradeBanner');
+    if (!banner) return;
+    if (manual && typeof toast === 'function') toast('Re-grading ' + idx.toUpperCase() + ' setup…');
+    try {
+        const r = await fetch(`${API_BASE}/api/live-trade-setup?index=${idx}`);
+        const d = await r.json();
+        if (d.error) throw new Error(d.error);
+        const g = d.grade || {}, proj = d.projection || {}, lv = d.levels || {}, sz = d.sizing || {}, tav = d.ta_consensus || {};
+        const gradeColors = { 'A+': '#f5c542', A: '#10b981', B: '#3b82f6', C: '#ef4444' };
+        const gcol = gradeColors[g.grade] || '#888';
+        const isBull = d.direction === 'BULLISH';
+        document.getElementById('setupIndex').textContent = idx.toUpperCase() + ' · ' + (d.regime || '');
+        banner.innerHTML = `
+            <div class="grade-badge" style="background:${gcol}1f;border-color:${gcol};color:${gcol}">${g.grade || '—'}</div>
+            <div class="grade-main">
+                <div class="grade-verdict" style="color:${gcol}">${g.verdict || ''}</div>
+                <div class="grade-sub">Score ${g.score || 0}/100 · ${isBull ? 'BULLISH ▲' : 'BEARISH ▼'} · Conf ${d.confidence || '—'}% · ADX ${d.adx || '—'} · ${g.rr_note || ''}</div>
+                <div class="grade-levels">
+                    <span>ENTRY <b>₹${lv.entry}</b></span>
+                    <span class="bull">TARGET <b>₹${lv.target}</b></span>
+                    <span class="bear">STOP <b>₹${lv.stop_loss}</b></span>
+                    <span>RR <b>1:${lv.risk_reward}</b></span>
+                    <span>CMP <b>₹${d.price}</b></span>
+                </div>
+            </div>`;
+        document.getElementById('setupChecklist').innerHTML =
+            (g.checklist || []).map(c => `<div class="check-row ${c.passed ? 'pass' : 'fail'}"><span>${c.passed ? '✓' : '✕'}</span><span>${c.label}</span></div>`).join('');
+        document.getElementById('setupProjection').innerHTML = `
+            <div class="proj-zone">TARGET ZONE <b>₹${(proj.target_zone || []).join(' – ₹')}</b> <span class="prob-pill">${proj.probability}%</span></div>
+            <div class="proj-meta">Horizon ${proj.horizon || ''} · Invalidation ₹${proj.invalidation} · ATR ${proj.atr}</div>
+            <ul>${(proj.reasoning || []).map(x => `<li>${x}</li>`).join('')}</ul>`;
+        document.getElementById('setupSizing').innerHTML = `
+            <div class="size-row"><span>Risk</span><b>${sz.risk_pct}% · ₹${Number(sz.risk_rupees || 0).toLocaleString()}</b></div>
+            <div class="size-row"><span>Position</span><b>${sz.lots} lot${sz.lots === 1 ? '' : 's'} (${sz.qty} qty)</b></div>
+            <div class="size-row"><span>Max loss</span><b class="bear">₹${Number(sz.max_loss || 0).toLocaleString()}</b></div>
+            <div class="size-rule">${g.position_size || ''}</div>`;
+        const v = tav.votes || { bullish: 0, bearish: 0, neutral: 0 };
+        document.getElementById('setupTA').innerHTML = tav.available
+            ? `<div class="ta-votes"><span class="bull">▲ ${v.bullish}</span><span class="bear">▼ ${v.bearish}</span><span>● ${v.neutral}</span></div>
+               <ul>${(tav.details || []).map(x => `<li>${x}</li>`).join('')}</ul>`
+            : `<div class="loading-picks">` + 'ta' + ` package not installed — core 33 engines voting.<br><span class="muted">pip install ta for a 4th independent vote.</span></div>`;
+        const tlChips = (d.trendlines || []).map(tl =>
+            `<span class="tl-chip"><i style="background:${tl.color}"></i>${tl.name} @ ${tl.current_value} · ${tl.broken ? 'BROKEN' : 'HOLDING'}</span>`).join('');
+        let legend = document.getElementById('setupLegend');
+        if (legend) legend.innerHTML = tlChips;
+        window.buildReplayChart(document.getElementById('setupChart'), {
+            candles: d.candles, trendlines: d.trendlines, markers: [],
+            levels: { entry: lv.entry, stop_loss: lv.stop_loss, target: lv.target, zone: proj.target_zone },
+        }, { height: 330, extendBars: 12 });
+        if (manual && typeof toast === 'function') toast(`Setup graded ${g.grade} — ${g.verdict}`, g.grade === 'A+' || g.grade === 'A');
+    } catch (e) {
+        banner.innerHTML = `<div class="loading-picks">Setup engine unavailable (${e.message})</div>`;
+    }
+}
+window.loadEliteSetup = loadEliteSetup;
+
+
+// ---------- Market intel (free sources) ----------
+
+window.renderMovers = function (movers, containerId, type) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    if (!movers || movers.length === 0) {
+        container.innerHTML = '<div class="loading-picks">No data this session</div>';
+        return;
+    }
+    container.innerHTML = movers.map(s => {
+        const name = s.name || s.symbol || '—';
+        const pct = parseFloat(s.change_pct);
+        const pctTxt = isNaN(pct) ? (s.change_pct || '') : `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`;
+        const ltp = (s.ltp || s.price) ? `<span class="mover-ltp">₹${Number(s.ltp || s.price).toLocaleString()}</span>` : '';
+        return `<div class="mover-row"><span class="mover-name">${name}</span>${ltp}<span class="mover-change ${type}">${pctTxt}</span></div>`;
+    }).join('');
+};
+
+async function loadMarketIntel() {
+    const strip = document.getElementById('intelStrip');
+    if (!strip) return;
+    try {
+        const r = await fetch(`${API_BASE}/api/market-intel`);
+        const d = await r.json();
+        if ((d.gainers && d.gainers.length) || (d.losers && d.losers.length)) {
+            if (d.gainers && d.gainers.length) window.renderMovers(d.gainers, 'topGainers', 'up');
+            if (d.losers && d.losers.length) window.renderMovers(d.losers, 'topLosers', 'down');
+        }
+        const b = d.breadth || {}, f = d.fii_dii || {};
+        const fiiTxt = (f.fii_net !== undefined && f.fii_net !== null && f.fii_net !== 0) ? `FII ₹${Number(f.fii_net).toLocaleString()}cr` : 'FII —';
+        const diiTxt = (f.dii_net !== undefined && f.dii_net !== null && f.dii_net !== 0) ? `DII ₹${Number(f.dii_net).toLocaleString()}cr` : 'DII —';
+        strip.innerHTML = `
+            <div class="intel-block"><label>BREADTH</label><span class="bull">▲ ${b.advances !== undefined ? b.advances : '—'}</span> / <span class="bear">▼ ${b.declines !== undefined ? b.declines : '—'}</span></div>
+            <div class="intel-block"><label>FLOWS</label><span>${fiiTxt}</span> · <span>${diiTxt}</span></div>
+            <div class="intel-block"><label>SOURCES</label><span>${(d.sources && d.sources.length ? d.sources : ['—']).join(' · ')}</span>${d.demo ? ' <span class="demo-pill">DEMO</span>' : ''}</div>
+            ${d.note ? `<div class="intel-note">${d.note}</div>` : ''}`;
+    } catch (e) {
+        strip.innerHTML = '<div class="loading-picks">Intel feeds unreachable — retrying…</div>';
+    }
+}
+
+
+// ---------- Elite boot wiring ----------
+
+(function eliteBoot() {
+    const boot = () => {
+        try {
+            if (typeof safeBoot === 'function') {
+                safeBoot('elite', loadEliteSetup);
+                safeBoot('intel', loadMarketIntel);
+            } else {
+                loadEliteSetup();
+                loadMarketIntel();
+            }
+            document.querySelectorAll('.trades-card .card-head h3').forEach(h => {
+                if (!h.querySelector('.row-hint')) {
+                    const s = document.createElement('span');
+                    s.className = 'row-hint';
+                    s.textContent = 'CLICK A ROW FOR FORENSIC REPLAY';
+                    h.appendChild(s);
+                }
+            });
+        } catch (e) { console.warn('elite boot failed', e); }
+    };
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', boot);
+    } else {
+        boot();
+    }
+    setInterval(() => { try { loadEliteSetup(); } catch (e) { /* noop */ } }, 90000);
+    setInterval(() => { try { loadMarketIntel(); } catch (e) { /* noop */ } }, 120000);
+    if (window.selectIndex && !window.selectIndex._eliteWrapped) {
+        const origSelect = window.selectIndex;
+        window.selectIndex = function (index) {
+            origSelect(index);
+            try { loadEliteSetup(); } catch (e) { /* noop */ }
+        };
+        window.selectIndex._eliteWrapped = true;
+    }
+})();
+
+
 

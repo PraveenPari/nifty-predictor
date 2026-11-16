@@ -254,9 +254,10 @@ def analyze_recent_trades(candles: List[Dict], index: str = 'nifty', hours: int 
                 break
         streak = {'type': 'WINNING' if last_res == 'WIN' else 'LOSING', 'count': count}
 
-    # Clean internal _idx before returning
+    # Clean internals before returning — but KEEP candle index for forensics
     for t in trades:
-        t.pop('_idx', None)
+        if '_idx' in t:
+            t['candle_idx'] = t.pop('_idx')
         t.pop('signal_strength', None)
 
     # Newest first for UI
