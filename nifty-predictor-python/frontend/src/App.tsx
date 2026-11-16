@@ -5,9 +5,10 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Activity, TrendingUp, DollarSign } from 'lucide-react'
 import { createChart, ColorType, CandlestickSeries, LineSeries } from 'lightweight-charts';
+import { apiUrl, SOCKET_URL } from '@/lib/api';
 
-// Use explicit URL for development to avoid proxy issues with WebSockets
-const socket = io('http://localhost:5000', {
+// API host from VITE_API_URL, else same-origin (works locally + hosted)
+const socket = io(SOCKET_URL, {
   transports: ['websocket'],
   autoConnect: true
 })
@@ -107,7 +108,7 @@ function App() {
       try {
         console.log(`Refreshing data for ${selectedIndex}...`);
         // Fetch Sentiment
-        const sentRes = await fetch(`http://localhost:5000/api/market-sentiment?index=${selectedIndex}`);
+        const sentRes = await fetch(apiUrl(`/api/market-sentiment?index=${selectedIndex}`));
         const sentData = await sentRes.json();
         setSentiment(sentData);
 
@@ -120,7 +121,7 @@ function App() {
           const targetOffset = direction === 'BULLISH' ? 100 : -100;
           const slOffset = direction === 'BULLISH' ? -50 : 50;
 
-          const estRes = await fetch(`http://localhost:5000/api/trade-estimate?index=${selectedIndex}&direction=${direction}&entry=${ltp}&target=${ltp + targetOffset}&stop_loss=${ltp + slOffset}&lots=2`);
+          const estRes = await fetch(apiUrl(`/api/trade-estimate?index=${selectedIndex}&direction=${direction}&entry=${ltp}&target=${ltp + targetOffset}&stop_loss=${ltp + slOffset}&lots=2`));
           const estData = await estRes.json();
           setTradeEstimate(estData);
         }
@@ -188,7 +189,7 @@ function App() {
         if (series) {
           // Fetch REAL Yahoo Finance data from backend
           try {
-            const response = await fetch(`http://localhost:5000/api/chart-data?index=${selectedIndex}&interval=5m&period=5d`);
+            const response = await fetch(apiUrl(`/api/chart-data?index=${selectedIndex}&interval=5m&period=5d`));
             const result = await response.json();
 
             if (result.candles && result.candles.length > 0) {

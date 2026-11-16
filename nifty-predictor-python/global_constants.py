@@ -19,21 +19,27 @@ MARKET_CONFIG = {
     'close_minute': 30
 }
 
-# Index Configuration
+# Index Configuration (lot sizes mirror pro_config/trading_config.py —
+# the single source of truth; simulator display values only)
+try:
+    from pro_config.trading_config import LOT_SIZES as _LOT_SIZES
+except ImportError:
+    _LOT_SIZES = {'nifty': 75, 'banknifty': 30}
+
 INDEX_CONFIG = {
     'nifty': {
         'name': 'NIFTY 50',
         'base_price': 25487,
         'strike_step': 50,
         'volatility': 0.0015,  # 0.15% base volatility
-        'lot_size': 65  # Jan 2026 Lot Size
+        'lot_size': _LOT_SIZES.get('nifty', 75)
     },
     'banknifty': {
         'name': 'BANK NIFTY',
         'base_price': 59855,
         'strike_step': 100,
         'volatility': 0.002,  # 0.20% base volatility
-        'lot_size': 30  # Jan 2026 Lot Size
+        'lot_size': _LOT_SIZES.get('banknifty', 30)
     }
 }
 

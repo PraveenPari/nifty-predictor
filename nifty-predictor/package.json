@@ -1,17 +1,18 @@
 {
-  "name": "nifty-predictor",
-  "version": "1.0.0",
-  "main": "angelone.js",
+  "name": "nifty-predictor-bridge",
+  "version": "2.0.0",
+  "description": "Node bridge: static dashboard + Angel One proxy + Flask backend proxy",
+  "main": "server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node server.js"
   },
-  "keywords": [],
-  "author": "",
+  "engines": {
+    "node": ">=18"
+  },
   "license": "ISC",
-  "description": "",
   "dependencies": {
     "cors": "^2.8.5",
-    "express": "^5.2.1",
+    "express": "^4.19.2",
     "http-proxy-middleware": "^3.0.5"
   }
 }

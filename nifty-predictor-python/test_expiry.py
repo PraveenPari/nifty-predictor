@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 print("Initializing Breeze...")
 breeze = BreezeConnect(api_key=BREEZE_API_KEY)
 try:
-    breeze.generate_session(api_secret=BREEZE_SECRET_KEY, session_token='54440984')
+    breeze.generate_session(api_secret=BREEZE_SECRET_KEY, session_token=os.environ.get('BREEZE_SESSION_TOKEN', ''))
     print("Session generated.")
 except Exception as e:
     print(f"Session failed: {e}")

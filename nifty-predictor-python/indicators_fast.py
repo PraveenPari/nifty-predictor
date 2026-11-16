@@ -235,6 +235,273 @@ class TechnicalIndicatorsFast:
         }
     
     @staticmethod
+    def vwap(highs: List[float],
+             lows: List[float],
+             closes: List[float],
+             volumes: List[float]) -> Optional[float]:
+        """Volume Weighted Average Price (session-anchored)."""
+        highs_s = TechnicalIndicatorsFast._validate_data(highs)
+        lows_s = TechnicalIndicatorsFast._validate_data(lows)
+        closes_s = TechnicalIndicatorsFast._validate_data(closes)
+        vols_s = TechnicalIndicatorsFast._validate_data(volumes)
+        if highs_s is None or vols_s is None or len(closes_s) < 2:
+            return None
+        typical = (highs_s + lows_s + closes_s) / 3
+        cum_vol = vols_s.cumsum().replace(0, np.nan)
+        vwap = (typical * vols_s).cumsum() / cum_vol
+        val = vwap.iloc[-1]
+        return round(float(val), 2) if not pd.isna(val) else None
+
+    @staticmethod
+    def cci(highs: List[float],
+            lows: List[float],
+            closes: List[float],
+            period: int = 20) -> Optional[float]:
+        """Commodity Channel Index."""
+        highs_s = TechnicalIndicatorsFast._validate_data(highs)
+        lows_s = TechnicalIndicatorsFast._validate_data(lows)
+        closes_s = TechnicalIndicatorsFast._validate_data(closes)
+        if highs_s is None or len(closes_s) < period:
+            return None
+        tp = (highs_s + lows_s + closes_s) / 3
+        sma_tp = tp.rolling(window=period).mean()
+        mad = (tp - sma_tp).abs().rolling(window=period).mean()
+        cci = (tp - sma_tp) / (0.015 * mad.replace(0, np.nan))
+        val = cci.iloc[-1]
+        return round(float(val), 2) if not pd.isna(val) else None
+
+    @staticmethod
+    def williams_r(highs: List[float],
+                   lows: List[float],
+                   closes: List[float],
+                   period: int = 14) -> Optional[float]:
+        """Williams %R."""
+        highs_s = TechnicalIndicatorsFast._validate_data(highs)
+        lows_s = TechnicalIndicatorsFast._validate_data(lows)
+        closes_s = TechnicalIndicatorsFast._validate_data(closes)
+        if highs_s is None or len(closes_s) < period:
+            return None
+        hh = highs_s.rolling(window=period).max()
+        ll = lows_s.rolling(window=period).min()
+        wr = -100 * (hh - closes_s) / (hh - ll).replace(0, np.nan)
+        val = wr.iloc[-1]
+        return round(float(val), 2) if not pd.isna(val) else None
+
+    @staticmethod
+    def mfi(highs: List[float],
+            lows: List[float],
+            closes: List[float],
+            volumes: List[float],
+            period: int = 14) -> Optional[float]:
+        """Money Flow Index."""
+        highs_s = TechnicalIndicatorsFast._validate_data(highs)
+        lows_s = TechnicalIndicatorsFast._validate_data(lows)
+        closes_s = TechnicalIndicatorsFast._validate_data(closes)
+        vols_s = TechnicalIndicatorsFast._validate_data(volumes)
+        if highs_s is None or vols_s is None or len(closes_s) < period + 1:
+            return None
+        tp = (highs_s + lows_s + closes_s) / 3
+        mf = tp * vols_s
+        delta = tp.diff()
+        pos_mf = mf.where(delta > 0, 0.0).rolling(window=period).sum()
+        neg_mf = mf.where(delta < 0, 0.0).rolling(window=period).sum()
+        mfr = pos_mf / neg_mf.replace(0, np.nan)
+        mfi = 100 - (100 / (1 + mfr))
+        val = mfi.iloc[-1]
+        return round(float(val), 2) if not pd.isna(val) else 50.0
+
+    @staticmethod
+    def parabolic_sar(highs: List[float],
+                      lows: List[float],
+                      closes: List[float],
+                      af_step: float = 0.02,
+                      af_max: float = 0.2) -> Optional[Dict]:
+        """Parabolic SAR (vectorised-friendly iterative core)."""
+        highs_s = TechnicalIndicatorsFast._validate_data(highs)
+        lows_s = TechnicalIndicatorsFast._validate_data(lows)
+        closes_s = TechnicalIndicatorsFast._validate_data(closes)
+        if highs_s is None or len(closes_s) < 5:
+            return None
+        h = highs_s.to_numpy(dtype=float)
+        l = lows_s.to_numpy(dtype=float)
+        c = closes_s.to_numpy(dtype=float)
+        n = len(c)
+        sar = np.zeros(n)
+        uptrend = True
+        sar[0] = l[0]
+        ep = h[0]
+        af = af_step
+        for i in range(1, n):
+            prev_sar = sar[i - 1]
+            sar[i] = prev_sar + af * (ep - prev_sar)
+            if uptrend:
+                sar[i] = min(sar[i], l[i - 1], l[i])
+                if c[i] < sar[i]:
+                    uptrend = False
+                    sar[i] = ep
+                    ep = l[i]
+                    af = af_step
+                else:
+                    if h[i] > ep:
+                        ep = h[i]
+                        af = min(af + af_step, af_max)
+            else:
+                sar[i] = max(sar[i], h[i - 1], h[i])
+                if c[i] > sar[i]:
+                    uptrend = True
+                    sar[i] = ep
+                    ep = h[i]
+                    af = af_step
+                else:
+                    if l[i] < ep:
+                        ep = l[i]
+                        af = min(af + af_step, af_max)
+        return {
+            'sar': round(float(sar[-1]), 2),
+            'trend': 'bullish' if uptrend else 'bearish',
+        }
+
+    @staticmethod
+    def ichimoku(highs: List[float],
+                 lows: List[float],
+                 closes: List[float],
+                 tenkan_period: int = 9,
+                 kijun_period: int = 26,
+                 senkou_period: int = 52) -> Optional[Dict]:
+        """Ichimoku Cloud (shifted values aligned to current bar for live use)."""
+        highs_s = TechnicalIndicatorsFast._validate_data(highs)
+        lows_s = TechnicalIndicatorsFast._validate_data(lows)
+        closes_s = TechnicalIndicatorsFast._validate_data(closes)
+        if highs_s is None or len(closes_s) < senkou_period:
+            return None
+        tenkan = (highs_s.rolling(window=tenkan_period).max() +
+                  lows_s.rolling(window=tenkan_period).min()) / 2
+        kijun = (highs_s.rolling(window=kijun_period).max() +
+                 lows_s.rolling(window=kijun_period).min()) / 2
+        senkou_a = ((tenkan + kijun) / 2).shift(kijun_period)
+        senkou_b = ((highs_s.rolling(window=senkou_period).max() +
+                     lows_s.rolling(window=senkou_period).min()) / 2).shift(kijun_period)
+        # Current-bar cloud edge (unshifted) for live signal evaluation
+        cloud_a = float(((tenkan + kijun) / 2).iloc[-1])
+        cloud_b = float(((highs_s.rolling(window=senkou_period).max() +
+                          lows_s.rolling(window=senkou_period).min()) / 2).iloc[-1])
+        price = float(closes_s.iloc[-1])
+        cloud_top = max(cloud_a, cloud_b)
+        cloud_bottom = min(cloud_a, cloud_b)
+        if price > cloud_top:
+            pos = 'above_cloud'
+        elif price < cloud_bottom:
+            pos = 'below_cloud'
+        else:
+            pos = 'inside_cloud'
+        return {
+            'tenkan': round(float(tenkan.iloc[-1]), 2),
+            'kijun': round(float(kijun.iloc[-1]), 2),
+            'senkou_a': round(cloud_a, 2),
+            'senkou_b': round(cloud_b, 2),
+            'cloud_top': round(cloud_top, 2),
+            'cloud_bottom': round(cloud_bottom, 2),
+            'position': pos,
+            'current_price': round(price, 2),
+        }
+
+    @staticmethod
+    def obv(closes: List[float], volumes: List[float]) -> Optional[float]:
+        """On-Balance Volume."""
+        closes_s = TechnicalIndicatorsFast._validate_data(closes)
+        vols_s = TechnicalIndicatorsFast._validate_data(volumes)
+        if closes_s is None or vols_s is None or len(closes_s) < 2:
+            return None
+        direction = np.sign(closes_s.diff().fillna(0))
+        obv = (direction * vols_s).cumsum()
+        return float(obv.iloc[-1])
+
+    @staticmethod
+    def donchian(highs: List[float],
+                 lows: List[float],
+                 period: int = 20) -> Optional[Dict]:
+        """Donchian Channel (highest high / lowest low)."""
+        highs_s = TechnicalIndicatorsFast._validate_data(highs)
+        lows_s = TechnicalIndicatorsFast._validate_data(lows)
+        if highs_s is None or len(highs_s) < period:
+            return None
+        upper = highs_s.rolling(window=period).max().iloc[-1]
+        lower = lows_s.rolling(window=period).min().iloc[-1]
+        return {
+            'upper': round(float(upper), 2),
+            'lower': round(float(lower), 2),
+            'middle': round(float((upper + lower) / 2), 2),
+        }
+
+    @staticmethod
+    def keltner(highs: List[float],
+               lows: List[float],
+               closes: List[float],
+               period: int = 20,
+               multiplier: float = 2.0) -> Optional[Dict]:
+        """Keltner Channel (EMA ± ATR multiple)."""
+        highs_s = TechnicalIndicatorsFast._validate_data(highs)
+        lows_s = TechnicalIndicatorsFast._validate_data(lows)
+        closes_s = TechnicalIndicatorsFast._validate_data(closes)
+        if highs_s is None or len(closes_s) < period + 1:
+            return None
+        ema = closes_s.ewm(span=period, adjust=False).mean()
+        prev_close = closes_s.shift(1)
+        tr = pd.concat([highs_s - lows_s,
+                        abs(highs_s - prev_close),
+                        abs(lows_s - prev_close)], axis=1).max(axis=1)
+        atr = tr.rolling(window=period).mean()
+        upper = ema + multiplier * atr
+        lower = ema - multiplier * atr
+        return {
+            'upper': round(float(upper.iloc[-1]), 2),
+            'middle': round(float(ema.iloc[-1]), 2),
+            'lower': round(float(lower.iloc[-1]), 2),
+        }
+
+    @staticmethod
+    def heikin_ashi(candles: List[Dict]) -> Optional[Dict]:
+        """Heikin-Ashi trend of the last two candles."""
+        if not candles or len(candles) < 3:
+            return None
+        ha_open_prev = (candles[-3]['open'] + candles[-3]['close']) / 2
+        ha_close_prev = (candles[-2]['open'] + candles[-2]['high'] +
+                         candles[-2]['low'] + candles[-2]['close']) / 4
+        ha_open = (ha_open_prev + ha_close_prev) / 2
+        c = candles[-1]
+        ha_close = (c['open'] + c['high'] + c['low'] + c['close']) / 4
+        ha_high = max(c['high'], ha_open, ha_close)
+        ha_low = min(c['low'], ha_open, ha_close)
+        if ha_close > ha_open and ha_low >= ha_open - (ha_high - ha_low) * 0.1:
+            trend = 'strong_bullish'
+        elif ha_close > ha_open:
+            trend = 'bullish'
+        elif ha_close < ha_open and ha_high <= ha_open + (ha_high - ha_low) * 0.1:
+            trend = 'strong_bearish'
+        else:
+            trend = 'bearish' if ha_close < ha_open else 'doji'
+        return {
+            'open': round(ha_open, 2), 'high': round(ha_high, 2),
+            'low': round(ha_low, 2), 'close': round(ha_close, 2),
+            'trend': trend,
+        }
+
+    @staticmethod
+    def rsi_series(prices: List[float], period: int = 14,
+                   lookback: int = 30) -> List[float]:
+        """Recent RSI values (for divergence detection)."""
+        series = TechnicalIndicatorsFast._validate_data(prices)
+        if series is None or len(series) < period + 2:
+            return []
+        delta = series.diff()
+        gain = delta.clip(lower=0)
+        loss = -delta.clip(upper=0)
+        avg_gain = gain.rolling(window=period).mean()
+        avg_loss = loss.rolling(window=period).mean()
+        rsi = 100 - (100 / (1 + avg_gain / avg_loss.replace(0, np.nan)))
+        return [round(float(x), 2) for x in rsi.dropna().tolist()[-lookback:]]
+
+    @staticmethod
     def pivot_points(highs: List[float], 
                      lows: List[float], 
                      closes: List[float]) -> Optional[Dict]:
@@ -294,7 +561,8 @@ class TechnicalIndicatorsFast:
         closes = df['close']
         highs = df['high']
         lows = df['low']
-        
+        volumes = df['volume'] if 'volume' in df.columns else pd.Series([0] * len(df))
+
         return {
             'rsi': TechnicalIndicatorsFast.rsi(closes),
             'macd': TechnicalIndicatorsFast.macd(closes),
@@ -303,8 +571,24 @@ class TechnicalIndicatorsFast:
             'adx': TechnicalIndicatorsFast.adx(highs, lows, closes),
             'supertrend': TechnicalIndicatorsFast.supertrend(highs, lows, closes),
             'atr': TechnicalIndicatorsFast.atr(highs, lows, closes),
+            'ema_9': TechnicalIndicatorsFast.ema(closes, 9),
+            'ema_21': TechnicalIndicatorsFast.ema(closes, 21),
             'ema_20': TechnicalIndicatorsFast.ema(closes, 20),
             'ema_50': TechnicalIndicatorsFast.ema(closes, 50),
             'sma_20': TechnicalIndicatorsFast.sma(closes, 20),
+            'sma_50': TechnicalIndicatorsFast.sma(closes, 50),
             'pivot_points': TechnicalIndicatorsFast.pivot_points(highs, lows, closes),
+            # Previously missing — 6 strategies silently returned "unavailable"
+            'vwap': TechnicalIndicatorsFast.vwap(highs, lows, closes, volumes),
+            'ichimoku': TechnicalIndicatorsFast.ichimoku(highs, lows, closes),
+            'cci': TechnicalIndicatorsFast.cci(highs, lows, closes),
+            'williams_r': TechnicalIndicatorsFast.williams_r(highs, lows, closes),
+            'psar': TechnicalIndicatorsFast.parabolic_sar(highs, lows, closes),
+            'mfi': TechnicalIndicatorsFast.mfi(highs, lows, closes, volumes),
+            # Pro-strategy extras
+            'obv': TechnicalIndicatorsFast.obv(closes, volumes),
+            'donchian': TechnicalIndicatorsFast.donchian(highs, lows),
+            'keltner': TechnicalIndicatorsFast.keltner(highs, lows, closes),
+            'heikin_ashi': TechnicalIndicatorsFast.heikin_ashi(candles),
+            'rsi_history': TechnicalIndicatorsFast.rsi_series(closes),
         }

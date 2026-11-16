@@ -6,6 +6,13 @@ Trading Strategies Module
 from typing import Dict, List, Optional, Tuple
 from global_constants import STRATEGY_WEIGHTS
 
+try:
+    from pro_strategies import analyze_pro_strategies
+    PRO_STRATEGIES_AVAILABLE = True
+except ImportError:
+    PRO_STRATEGIES_AVAILABLE = False
+    analyze_pro_strategies = None
+
 
 class TradingStrategies:
     """
@@ -414,9 +421,11 @@ class TradingStrategies:
         return f"MARKET STATE: {state} | {action}\nCONFIRMATIONS: {conf_text}\n{pattern_text}"
 
     @staticmethod
-    def analyze_all(indicators: Dict, price: float, sentiment: Optional[Dict] = None, candles: List[Dict] = []) -> Dict:
-        """Run all strategies and return results with detailed analysis"""
+    def analyze_all(indicators: Dict, price: float, sentiment: Optional[Dict] = None, candles: List[Dict] = None,
+                    option_chain: Optional[List[Dict]] = None) -> Dict:
+        """Run all strategies (18 classic + 15 pro) and return results with detailed analysis"""
         strategies = []
+        candles = candles or []
         
         # Check Sideways
         is_sideways, sideways_reason = TradingStrategies.check_sideways(indicators)
@@ -550,15 +559,26 @@ class TradingStrategies:
             })
         
         
+        # --- 15 Pro strategies (price action + volume + option chain) ---
+        pro_verdict = None
+        if PRO_STRATEGIES_AVAILABLE and candles:
+            try:
+                pro_out = analyze_pro_strategies(indicators, price, candles, sentiment, option_chain)
+                strategies.extend(pro_out['strategies'])
+                pro_verdict = pro_out['pro_verdict']
+            except Exception as e:
+                print(f"[WARN] Pro strategies failed: {e}")
+
         # Generate Pro Analysis
         analysis_text = TradingStrategies.generate_pro_analysis(strategies, is_sideways, sideways_reason, patterns)
-        
+
         return {
             'strategies': strategies,
             'is_sideways': is_sideways,
             'sideways_reason': sideways_reason,
             'patterns': patterns,
-            'pro_analysis': analysis_text
+            'pro_analysis': analysis_text,
+            'pro_verdict': pro_verdict,
         }
     
     @staticmethod

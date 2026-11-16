@@ -1,12 +1,31 @@
 """
-Debug Breeze API Response - Check what ICICI returns
+Breeze test - test_breeze_raw.py (secrets via environment)
+NOTE: Credentials are loaded ONLY from environment / .env secrets.
+Set BREEZE_API_KEY, BREEZE_SECRET_KEY, BREEZE_SESSION_TOKEN first.
 """
-import requests
+import os
+import sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+from secrets_manager import get_breeze_credentials, is_breeze_configured, mask
 
-# Credentials
-API_KEY = "1L999c8849796Y64573a`y553k478445"
-SECRET_KEY = "`IDU6723#1382=C6y917c6U72D9K362("
-SESSION_TOKEN = "54653418"
+_creds = get_breeze_credentials()
+API_KEY = _creds["api_key"]
+SECRET_KEY = _creds["secret_key"]
+SESSION_TOKEN = _creds["session_token"]
+BREEZE_API_KEY, BREEZE_SECRET_KEY = API_KEY, SECRET_KEY
+
+if not is_breeze_configured():
+    print("[SKIP] Breeze secrets not set. Export BREEZE_API_KEY / "
+          "BREEZE_SECRET_KEY / BREEZE_SESSION_TOKEN (or add to .env) and re-run.")
+    sys.exit(2)
+print("[SECRETS] Using Breeze key " + mask(API_KEY) + " from environment.")
+
+import requests
 
 print("=" * 60)
 print("  BREEZE API RAW REQUEST TEST")

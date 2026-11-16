@@ -1,4 +1,17 @@
 # Trading Configuration (Display Only - No Live Trading)
+#
+# SINGLE SOURCE OF TRUTH for lot sizes — pro_trader and global_constants
+# both read from here. Override via env when NSE revises contracts:
+#   LOT_SIZE_NIFTY=75 LOT_SIZE_BANKNIFTY=30
+import os
+
+
+def _int_env(name: str, default: int) -> int:
+    try:
+        return int(os.getenv(name, default))
+    except (TypeError, ValueError):
+        return default
+
 
 # Capital Settings
 INITIAL_CAPITAL = 100000
@@ -16,16 +29,19 @@ MAX_POSITION_SIZE = 0.05  # 5% of capital
 # Index Configuration
 INDEX_CONFIG = {
     'nifty': {
-        'lot_size': 75,
+        'lot_size': _int_env('LOT_SIZE_NIFTY', 75),
         'strike_step': 50,
         'symbol': 'NIFTY'
     },
     'banknifty': {
-        'lot_size': 30,
+        'lot_size': _int_env('LOT_SIZE_BANKNIFTY', 30),
         'strike_step': 100,
         'symbol': 'BANKNIFTY'
     }
 }
+
+# Flat map used by pro_trader / APIs
+LOT_SIZES = {k: v['lot_size'] for k, v in INDEX_CONFIG.items()}
 
 # Signal Thresholds
 SIGNAL_CONFIG = {

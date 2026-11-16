@@ -646,6 +646,53 @@ function updateFullAnalysis(data) {
 
     }
 
+
+
+    // Update pro confluence verdict
+
+    if (data.pro_verdict) {
+
+        updateProVerdict(data.pro_verdict);
+
+    }
+
+}
+
+
+
+function updateProVerdict(verdict) {
+
+    const card = document.getElementById('proVerdictCard');
+
+    if (!card) return;
+
+    card.style.display = '';
+
+    const set = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
+
+    set('proVerdictAction', verdict.action || '--');
+
+    set('proVerdictDirection', `${verdict.direction || '--'}`);
+
+    set('proVerdictConfidence', `${verdict.confidence || '--'}%`);
+
+    set('proVerdictVotes', `${verdict.bullish_votes ?? '--'}/${verdict.bearish_votes ?? '--'}/${verdict.neutral_votes ?? '--'}`);
+
+    set('proVerdictRegime', verdict.regime || '--');
+
+    const plan = verdict.trade_plan || {};
+
+    set('proVerdictPlan', plan.entry
+        ? `Entry ${plan.entry} | SL ${plan.stop_loss} | T1 ${plan.target_1} | T2 ${plan.target_2}`
+        : (plan.note || '--'));
+
+    const dirEl = document.getElementById('proVerdictDirection');
+
+    if (dirEl) {
+        dirEl.style.color = verdict.direction === 'BULLISH' ? 'var(--up-color)'
+            : verdict.direction === 'BEARISH' ? 'var(--down-color)' : 'var(--text-primary)';
+    }
+
 }
 
 
@@ -1877,6 +1924,18 @@ window.showStrategyDetail = function (strategyName) {
     if (strengthEl) strengthEl.textContent = `${strategy.strength}%`;
 
     if (reasonEl) reasonEl.textContent = strategy.reason;
+
+    // Pro strategies ship tradeable levels — show them when present
+    const levelsRow = document.getElementById('modalLevelsRow');
+    const levelsEl = document.getElementById('modalLevels');
+    if (levelsRow && levelsEl) {
+        if (strategy.entry !== undefined && strategy.stop_loss !== undefined && strategy.target !== undefined) {
+            levelsEl.textContent = `Entry ${strategy.entry} | SL ${strategy.stop_loss} | Target ${strategy.target}`;
+            levelsRow.style.display = '';
+        } else {
+            levelsRow.style.display = 'none';
+        }
+    }
 
 
 

@@ -1,0 +1,41 @@
+# =====================================================================
+# Nifty Predictor Pro — FULL requirements (local / beefy servers only)
+# Installs everything in requirements.txt PLUS the heavy optional ML stack.
+# Do NOT use on free-tier hosts (tensorflow alone is ~500MB and OOMs 512MB
+# dynos). All of these are optional — every import in the codebase is
+# guarded and the app degrades gracefully without them.
+#
+#   pip install -r requirements.txt
+#   pip install -r requirements-full.txt
+# =====================================================================
+
+-r requirements.txt
+
+# Deep learning / gradient boosting (optional)
+tensorflow>=2.15.0
+xgboost>=2.0.0
+lightgbm>=4.1.0
+catboost>=1.2.2
+
+# Advanced indicators / analysis (optional)
+pandas-ta>=0.3.14b
+ta>=0.10.2
+PyWavelets>=1.5.0
+hmmlearn>=0.3.0
+arch>=6.2.0
+
+# Sentiment NLP (optional)
+nltk>=3.8.1
+textblob>=0.17.1
+
+# Charts / NSE extras (optional)
+mplfinance>=0.12.9b7
+nsepython>=1.0.0
+
+# Databases (optional — features degrade gracefully without them)
+pymongo>=4.6.0
+redis>=5.0.0
+
+# True-websocket worker (optional; slim uses gthread + polling fallback)
+eventlet>=0.34.0
+simple-websocket>=1.0.0

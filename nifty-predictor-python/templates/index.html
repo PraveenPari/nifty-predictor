@@ -340,6 +340,21 @@
                     </div>
                 </div>
 
+                <!-- Pro Confluence Verdict -->
+                <div class="panel-card" id="proVerdictCard" style="display:none;">
+                    <div class="panel-head">
+                        <h3>🎯 PRO CONFLUENCE</h3>
+                        <span class="live-badge" id="proVerdictAction">--</span>
+                    </div>
+                    <div class="ml-info">
+                        <div class="ml-row"><span>Direction:</span><span id="proVerdictDirection">--</span></div>
+                        <div class="ml-row"><span>Confidence:</span><span id="proVerdictConfidence">--</span></div>
+                        <div class="ml-row"><span>Votes (B/B/N):</span><span id="proVerdictVotes">--</span></div>
+                        <div class="ml-row"><span>Regime:</span><span id="proVerdictRegime">--</span></div>
+                        <div class="ml-row"><span>Plan:</span><span id="proVerdictPlan">--</span></div>
+                    </div>
+                </div>
+
                 <!-- Strategy Tabs -->
                 <div class="strategy-tabs-container">
                     <div class="strategy-tabs" id="strategyTabs">
@@ -355,6 +370,10 @@
                             Volume</button>
                         <button class="strat-tab" data-category="sentiment" onclick="filterStrategies('sentiment')">💭
                             Sentiment</button>
+                        <button class="strat-tab" data-category="support_resistance"
+                            onclick="filterStrategies('support_resistance')">🧲 Levels</button>
+                        <button class="strat-tab" data-category="pro" onclick="filterStrategies('pro')">🎯
+                            Pro</button>
                     </div>
                     <div class="strategies-grid" id="strategiesGrid">
                         <!-- Strategies will be populated here -->
@@ -484,6 +503,10 @@
                     <div class="detail-row">
                         <span class="label">Reason:</span>
                         <span class="value" id="modalReason">--</span>
+                    </div>
+                    <div class="detail-row" id="modalLevelsRow" style="display:none;">
+                        <span class="label">Levels:</span>
+                        <span class="value" id="modalLevels">--</span>
                     </div>
                 </div>
             </div>

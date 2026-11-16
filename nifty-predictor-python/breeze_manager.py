@@ -23,6 +23,16 @@ except Exception as e:
     print(f"CRITICAL: Breeze import error: {e}")
 
 from pro_config.api_config import BREEZE_API_KEY, BREEZE_SECRET_KEY, BREEZE_SESSION_TOKEN, CACHE_DURATION, RETRY_ATTEMPTS
+from secrets_manager import mask, breeze_login_url
+
+
+def _is_auth_error(exc: Exception) -> bool:
+    """Detect expired/invalid session so we can ask for re-auth instead of retrying."""
+    msg = str(exc).lower()
+    return any(k in msg for k in (
+        "session", "token", "auth", "unauthor", "expired", "invalid",
+        "403", "401", "customer", "apikey", "api key",
+    ))
 
 
 class BreezeManager:
@@ -35,8 +45,8 @@ class BreezeManager:
         self.cache_time = {}
         self.lock = threading.Lock()
         self.init_attempted = False
-        self.api_key = BREEZE_API_KEY
-        self.secret_key = BREEZE_SECRET_KEY
+        self.api_key = BREEZE_API_KEY or ""
+        self.secret_key = BREEZE_SECRET_KEY or ""
         self.session_token = None
         
         # Exact stock codes for Breeze indices
@@ -53,12 +63,15 @@ class BreezeManager:
         if not BREEZE_AVAILABLE or BreezeConnect is None:
             return False
             
+        if not self.api_key:
+            print("[BREEZE] No API key in secrets — set BREEZE_API_KEY to enable.")
+            return False
         try:
-            print(f"DEBUG: Initializing BreezeConnect with API key: {self.api_key}")
+            print(f"[BREEZE] Initializing BreezeConnect (key {mask(self.api_key)})")
             self.breeze = BreezeConnect(api_key=self.api_key)
             return True
         except Exception as e:
-            print(f"CRITICAL: BreezeConnect init failed: {e}")
+            print(f"[BREEZE] BreezeConnect init failed: {e}")
             return False
     
     def _is_cache_valid(self, key: str) -> bool:
@@ -115,6 +128,10 @@ class BreezeManager:
             else:
                 print(f"WARNING: Breeze get_quotes returned empty or failure: {quote}")
         except Exception as e:
+            if _is_auth_error(e):
+                print(f"[BREEZE] Session looks expired ({e}). "
+                      f"Mint a fresh token via the login URL and update BREEZE_SESSION_TOKEN.")
+                self.connected = False
             with self.lock:
                 if cache_key in self.cache:
                     return self.cache[cache_key]
@@ -185,13 +202,16 @@ class BreezeManager:
             # Calculate next expiry
             today = datetime.now()
             
-            # Dynamic expiry discovery: check from today to next 10 days
+            # Dynamic expiry discovery: check from today to next 10 days,
+            # in both date formats Breeze has accepted over time.
             cached_exp = self.cache.get(f"{index_key}_expiry")
             expiries_to_try = [cached_exp] if cached_exp else []
             for offset in range(0, 11):
-                exp_dt = (today + timedelta(days=offset)).strftime("%d-%b-%Y")
-                if exp_dt not in expiries_to_try:
-                    expiries_to_try.append(exp_dt)
+                day = today + timedelta(days=offset)
+                for fmt in ("%Y-%m-%d", "%d-%b-%Y"):
+                    exp_dt = day.strftime(fmt)
+                    if exp_dt not in expiries_to_try:
+                        expiries_to_try.append(exp_dt)
 
             chain_data = []
             used_expiry = ""
@@ -292,28 +312,56 @@ class BreezeManager:
             return None
 
     def generate_session_token(self):
-        """Get login URL"""
-        return f"https://api.icicidirect.com/api/v2/login?api_key={self.api_key}"
+        """Get login URL (uses key from secrets only)."""
+        if self.api_key:
+            return f"https://api.icicidirect.com/api/v2/login?api_key={self.api_key}"
+        return breeze_login_url()
 
     def set_session_token(self, session_token: str):
-        """100% Working Session Initialization"""
+        """Initialize session. Never logs the token value."""
+        if not session_token or not session_token.strip():
+            print("[BREEZE] Empty session token rejected.")
+            return False
+        if not self.api_key or not self.secret_key:
+            print("[BREEZE] API key/secret missing in secrets — cannot authenticate.")
+            return False
         if not self.breeze:
             self._connect()
-            
+
         if not self.breeze:
             return False
-            
+
         try:
-            print(f"DEBUG: Setting session token: {session_token[:10]}...")
-            self.breeze.generate_session(api_secret=self.secret_key, session_token=session_token)
+            self.breeze.generate_session(api_secret=self.secret_key,
+                                         session_token=session_token.strip())
             self.connected = True
-            self.session_token = session_token
-            print("[SUCCESS] Breeze session authenticated!")
+            self.session_token = session_token.strip()
+            # Verify the session actually works before declaring success
+            try:
+                probe = self.breeze.get_quotes(stock_code='NIFTY', exchange_code='NSE',
+                                               product_type='cash')
+                if not (probe and probe.get('Success')):
+                    raise RuntimeError(f"verification failed: {probe}")
+            except Exception as ve:
+                print(f"[BREEZE] Session created but verification failed: {ve}")
+                self.connected = False
+                return False
+            print("[BREEZE] Session authenticated & verified.")
             return True
         except Exception as e:
-            print(f"[ERROR] Breeze session auth failed: {e}")
+            print(f"[BREEZE] Session auth failed: {e}")
             self.connected = False
             return False
+
+    def status(self):
+        """Safe status for APIs/logs — never includes secret values."""
+        return {
+            'configured': bool(self.api_key and self.secret_key),
+            'api_key': mask(self.api_key),
+            'connected': self.connected,
+            'session_token_set': bool(self.session_token or BREEZE_SESSION_TOKEN),
+            'login_url_ready': bool(self.api_key),
+        }
 
     def is_connected(self) -> bool:
         return self.connected

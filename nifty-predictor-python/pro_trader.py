@@ -4,14 +4,27 @@ Handles option recommendations, lot sizing, backtesting, and forward predictions
 """
 
 from typing import Dict, List, Optional
-from scipy.stats import norm
 import numpy as np
 
-# Lot sizes for index options
-LOT_SIZES = {
-    'nifty': 25,
-    'banknifty': 15
-}
+try:
+    from scipy.stats import norm
+except ImportError:  # lightweight fallback: erf-based normal CDF
+    import math
+
+    class _NormFallback:
+        @staticmethod
+        def cdf(x):
+            return 0.5 * (1.0 + math.erf(x / math.sqrt(2.0)))
+
+    norm = _NormFallback()
+    print("INFO: scipy not installed — using erf-based normal CDF fallback.")
+
+# Lot sizes — single source of truth in pro_config/trading_config.py
+# (env-overridable via LOT_SIZE_NIFTY / LOT_SIZE_BANKNIFTY)
+try:
+    from pro_config.trading_config import LOT_SIZES
+except ImportError:  # standalone use
+    LOT_SIZES = {'nifty': 75, 'banknifty': 30}
 
 # Default risk per trade in INR
 DEFAULT_RISK_PER_TRADE = 5000
