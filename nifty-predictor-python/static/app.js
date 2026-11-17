@@ -2890,4 +2890,153 @@ async function loadMarketIntel() {
 })();
 
 
+// ============================================
+// BREEZE DAILY TOKEN — in-UI connect flow
+// Token is POSTed to the server (memory only), never stored locally.
+// ============================================
+
+let breezeLoginUrl = '';
+let breezeConnectedCache = null;
+
+async function refreshBreezeStatus() {
+    const dot = document.getElementById('breezeDot');
+    const txt = document.getElementById('breezeBtnText');
+    const btn = document.getElementById('breezeBtn');
+    const banner = document.getElementById('breezeBanner');
+    const bannerText = document.getElementById('breezeBannerText');
+    try {
+        const r = await fetch(`${API_BASE}/api/status`);
+        const d = await r.json();
+        const connected = !!d.breeze_connected;
+        const configured = !!d.breeze_configured;
+        breezeConnectedCache = connected;
+        if (dot) dot.className = 'breeze-dot ' + (connected ? 'on' : (configured ? '' : 'idle'));
+        if (txt) txt.textContent = connected ? 'Breeze ● LIVE' : (configured ? 'Connect Breeze' : 'Breeze: no key');
+        if (btn) btn.classList.toggle('live', connected);
+        const mStatus = document.getElementById('breezeModalStatus');
+        if (mStatus) {
+            mStatus.innerHTML = connected
+                ? 'Status: <b class="on">● CONNECTED</b> — live broker feed active for today.'
+                : (configured
+                    ? 'Status: <b class="off">● DISCONNECTED</b> — paste today\'s token below.'
+                    : 'Status: <b class="off">● NO API KEY</b> — set BREEZE_API_KEY in Render Environment first.');
+        }
+        // Daily nudge banner: show when disconnected unless dismissed today
+        if (banner) {
+            let dismissed = '';
+            try { dismissed = localStorage.getItem('breezeBannerHide') || ''; } catch (e) { /* noop */ }
+            const today = new Date().toISOString().slice(0, 10);
+            if (!connected && dismissed !== today) {
+                if (bannerText) {
+                    bannerText.textContent = configured
+                        ? '⏰ Daily Breeze token needed for live broker data — takes 30 seconds.'
+                        : '⏰ Breeze API key missing — set BREEZE_API_KEY in Render Environment, then connect here daily.';
+                }
+                banner.style.display = 'flex';
+            } else {
+                banner.style.display = 'none';
+            }
+        }
+    } catch (e) {
+        if (dot) dot.className = 'breeze-dot idle';
+        if (txt) txt.textContent = 'Breeze';
+    }
+}
+
+window.openBreezeModal = function () {
+    const m = document.getElementById('breezeModal');
+    if (!m) return;
+    const msg = document.getElementById('breezeMsg');
+    if (msg) { msg.textContent = ''; msg.className = 'breeze-msg'; }
+    refreshBreezeStatus();
+    m.style.display = 'flex';
+};
+
+window.closeBreezeModal = function () {
+    const m = document.getElementById('breezeModal');
+    if (m) m.style.display = 'none';
+    const inp = document.getElementById('breezeTokenInput');
+    if (inp) inp.value = ''; // never leave the token sitting in the page
+};
+
+window.dismissBreezeBanner = function () {
+    try { localStorage.setItem('breezeBannerHide', new Date().toISOString().slice(0, 10)); } catch (e) { /* noop */ }
+    const banner = document.getElementById('breezeBanner');
+    if (banner) banner.style.display = 'none';
+};
+
+window.breezeGetLogin = async function () {
+    const linkEl = document.getElementById('breezeLoginLink');
+    const openBtn = document.getElementById('breezeOpenBtn');
+    try {
+        const r = await fetch(`${API_BASE}/api/breeze-login-url`);
+        const d = await r.json();
+        if (d.url) {
+            breezeLoginUrl = d.url;
+            if (linkEl) { linkEl.textContent = d.url; linkEl.style.display = 'block'; }
+            if (openBtn) openBtn.disabled = false;
+            window.open(d.url, '_blank', 'noopener');
+            if (typeof toast === 'function') toast('ICICI login opened — copy the token after login');
+        } else {
+            throw new Error(d.message || 'login URL unavailable');
+        }
+    } catch (e) {
+        if (typeof toast === 'function') toast('Login link failed: ' + e.message);
+    }
+};
+
+window.breezeOpenLogin = function () {
+    if (breezeLoginUrl) window.open(breezeLoginUrl, '_blank', 'noopener');
+};
+
+window.breezeSubmitToken = async function () {
+    const inp = document.getElementById('breezeTokenInput');
+    const msg = document.getElementById('breezeMsg');
+    const btn = document.getElementById('breezeConnectBtn');
+    const token = inp ? inp.value.trim() : '';
+    if (!token) {
+        if (msg) { msg.textContent = 'Paste the token first.'; msg.className = 'breeze-msg err'; }
+        return;
+    }
+    if (btn) btn.disabled = true;
+    if (msg) { msg.textContent = 'Connecting…'; msg.className = 'breeze-msg'; }
+    try {
+        const r = await fetch(`${API_BASE}/api/breeze-auth`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token }),
+        });
+        const d = await r.json();
+        if (d.success) {
+            if (msg) { msg.textContent = '✓ Connected — live broker feed active for today.'; msg.className = 'breeze-msg ok'; }
+            if (inp) inp.value = '';
+            if (typeof toast === 'function') toast('Breeze connected for today ✓', true);
+            await refreshBreezeStatus();
+            setTimeout(() => window.closeBreezeModal(), 1400);
+        } else {
+            throw new Error(d.message || 'auth failed — token may be expired');
+        }
+    } catch (e) {
+        if (msg) { msg.textContent = '✕ ' + e.message + ' — mint a fresh token (step 1).'; msg.className = 'breeze-msg err'; }
+    }
+    if (btn) btn.disabled = false;
+};
+
+(function breezeBoot() {
+    const boot = () => {
+        try {
+            refreshBreezeStatus();
+            const m = document.getElementById('breezeModal');
+            if (m) m.addEventListener('click', (e) => { if (e.target === m) window.closeBreezeModal(); });
+        } catch (e) { /* noop */ }
+    };
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', boot);
+    } else {
+        boot();
+    }
+    setInterval(() => { try { refreshBreezeStatus(); } catch (e) { /* noop */ } }, 60000);
+})();
+
+
 
