@@ -602,6 +602,7 @@ def status():
         'angel_one_client': angel_one_enhanced.client_code if ANGEL_AVAILABLE and angel_one_enhanced.is_logged_in else None,
         'breeze_connected': bool(BREEZE_AVAILABLE and breeze_manager.is_connected()),
         'breeze_configured': breeze.get('fully_configured', False),
+        'breeze_key_ready': breeze.get('login_url_ready', False),
         'market_open': is_market_open(),
         'demo_mode': DEMO_MODE,
         'yahoo_available': YAHOO_AVAILABLE,

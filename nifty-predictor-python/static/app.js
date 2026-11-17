@@ -2925,7 +2925,7 @@ async function refreshBreezeStatus() {
         const r = await fetch(`${API_BASE}/api/status`);
         const d = await readJsonSafe(r);
         const connected = !!d.breeze_connected;
-        const configured = !!d.breeze_configured;
+        const configured = !!(d.breeze_key_ready || d.breeze_configured);
         breezeConnectedCache = connected;
         if (dot) dot.className = 'breeze-dot ' + (connected ? 'on' : (configured ? '' : 'idle'));
         if (txt) txt.textContent = connected ? 'Breeze ● LIVE' : (configured ? 'Connect Breeze' : 'Breeze: no key');
