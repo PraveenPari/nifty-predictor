@@ -3025,7 +3025,7 @@ window.breezeSubmitToken = async function () {
         });
         const d = await readJsonSafe(r);
         if (d.success) {
-            if (msg) { msg.textContent = d.warning ? ('✓ Connected — note: ' + d.warning) : '✓ Connected — live broker feed active for today.'; msg.className = 'breeze-msg ok'; }
+            if (msg) { const live = (d.probe && d.probe.ltp) ? (' — NIFTY ₹' + Number(d.probe.ltp).toLocaleString('en-IN') + ' live') : ' — live broker feed active for today.'; msg.textContent = d.warning ? ('✓ Connected — note: ' + d.warning) : ('✓ Connected' + live); msg.className = 'breeze-msg ok'; }
             if (inp) inp.value = '';
             if (typeof toast === 'function') toast('Breeze connected for today ✓', true);
             await refreshBreezeStatus();

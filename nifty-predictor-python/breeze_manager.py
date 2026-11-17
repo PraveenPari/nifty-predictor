@@ -49,6 +49,7 @@ class BreezeManager:
         self.secret_key = BREEZE_SECRET_KEY or ""
         self.session_token = None
         self.last_error = ''  # precise reason surfaced to UI when auth fails
+        self.last_probe = None  # last verified quote (proof of live feed)
         
         # Exact stock codes for Breeze indices
         self.symbols = {
@@ -398,7 +399,9 @@ class BreezeManager:
             probe = self.get_live_price('nifty')
             if not probe or not probe.get('ltp'):
                 raise RuntimeError("quote probe returned no data")
-            print("[BREEZE] Session authenticated & verified.")
+            self.last_probe = {'ltp': probe.get('ltp'), 'change': probe.get('change'),
+                               'source': probe.get('source', 'Breeze')}
+            print(f"[BREEZE] Session authenticated & verified (NIFTY {probe.get('ltp')}).")
         except Exception as ve:
             print(f"[BREEZE] WARNING: session valid but quote probe failed: {ve}")
             self.last_error = (f"token accepted, but live probe failed ({ve}) — "

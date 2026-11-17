@@ -809,7 +809,8 @@ def breeze_auth():
         return jsonify({'success': False, 'message': 'Breeze SDK not installed'}), 503
     if breeze_manager.set_session_token(token):
         return jsonify({'success': True,
-                        'warning': getattr(breeze_manager, 'last_error', '') or None})
+                        'warning': getattr(breeze_manager, 'last_error', '') or None,
+                        'probe': getattr(breeze_manager, 'last_probe', None)})
     login = breeze_login_url()
     return jsonify({
         'success': False,
