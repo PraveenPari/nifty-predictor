@@ -112,9 +112,9 @@
 
         <!-- ── DAILY BREEZE TOKEN NUDGE ── -->
         <div class="breeze-banner" id="breezeBanner" style="display:none;">
-            <span class="breeze-banner-text" id="breezeBannerText">\u23f0 Daily Breeze token needed for live broker data.</span>
+            <span class="breeze-banner-text" id="breezeBannerText">⏰ Daily Breeze token needed for live broker data.</span>
             <button class="breeze-banner-btn" onclick="openBreezeModal()">Connect in 30s</button>
-            <button class="breeze-banner-x" onclick="dismissBreezeBanner()" title="Remind me tomorrow">\u00d7</button>
+            <button class="breeze-banner-x" onclick="dismissBreezeBanner()" title="Remind me tomorrow">×</button>
         </div>
 
         <!-- ══════════ MAIN LAYOUT ══════════ -->
@@ -478,19 +478,19 @@
     <div id="breezeModal" class="breeze-modal" style="display:none;">
         <div class="breeze-modal-card">
             <div class="breeze-modal-head">
-                <h3>\U0001f517 Breeze Daily Token</h3>
+                <h3>🔗 Breeze Daily Token</h3>
                 <button class="modal-close" onclick="closeBreezeModal()">&times;</button>
             </div>
             <div class="breeze-modal-body">
-                <div class="breeze-status" id="breezeModalStatus">Checking status\u2026</div>
+                <div class="breeze-status" id="breezeModalStatus">Checking status…</div>
                 <div class="breeze-step">
                     <div class="breeze-step-num">1</div>
                     <div class="breeze-step-main">
                         <b>Get your login link</b>
-                        <p>Generates your personal ICICI login URL. Log in there to mint today\u2019s token.</p>
+                        <p>Generates your personal ICICI login URL. Log in there to mint today’s token.</p>
                         <div class="breeze-row">
                             <button class="refresh-btn" id="breezeLoginBtn" onclick="breezeGetLogin()">Get login link</button>
-                            <button class="refresh-btn ghost" id="breezeOpenBtn" onclick="breezeOpenLogin()" disabled>Open ICICI login \u2197</button>
+                            <button class="refresh-btn ghost" id="breezeOpenBtn" onclick="breezeOpenLogin()" disabled>Open ICICI login ↗</button>
                         </div>
                         <div class="breeze-link" id="breezeLoginLink" style="display:none;"></div>
                     </div>
@@ -498,9 +498,9 @@
                 <div class="breeze-step">
                     <div class="breeze-step-num">2</div>
                     <div class="breeze-step-main">
-                        <b>Paste today\u2019s session token</b>
-                        <p>Copy the token from ICICI after login. It stays in server memory only \u2014 never stored, never logged.</p>
-                        <textarea id="breezeTokenInput" class="breeze-input" rows="3" placeholder="Paste session token here\u2026" autocomplete="off" spellcheck="false"></textarea>
+                        <b>Paste today’s session token</b>
+                        <p>Copy the token from ICICI after login. It stays in server memory only — never stored, never logged.</p>
+                        <textarea id="breezeTokenInput" class="breeze-input" rows="3" placeholder="Paste session token here…" autocomplete="off" spellcheck="false"></textarea>
                         <div class="breeze-row">
                             <button class="breeze-connect-btn" id="breezeConnectBtn" onclick="breezeSubmitToken()">Connect for today</button>
                         </div>

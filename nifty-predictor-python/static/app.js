@@ -2898,6 +2898,23 @@ async function loadMarketIntel() {
 let breezeLoginUrl = '';
 let breezeConnectedCache = null;
 
+async function readJsonSafe(r) {
+    let text = '';
+    try {
+        text = await r.text();
+    } catch (e) {
+        throw new Error('no response — service may be restarting, wait 30s and retry');
+    }
+    if (!text) {
+        throw new Error(`empty response (HTTP ${r.status}) — service may be restarting, wait 30s and retry`);
+    }
+    try {
+        return JSON.parse(text);
+    } catch (e) {
+        throw new Error(`bad response (HTTP ${r.status}) — wait 30s and retry`);
+    }
+}
+
 async function refreshBreezeStatus() {
     const dot = document.getElementById('breezeDot');
     const txt = document.getElementById('breezeBtnText');
@@ -2906,7 +2923,7 @@ async function refreshBreezeStatus() {
     const bannerText = document.getElementById('breezeBannerText');
     try {
         const r = await fetch(`${API_BASE}/api/status`);
-        const d = await r.json();
+        const d = await readJsonSafe(r);
         const connected = !!d.breeze_connected;
         const configured = !!d.breeze_configured;
         breezeConnectedCache = connected;
@@ -2970,7 +2987,7 @@ window.breezeGetLogin = async function () {
     const openBtn = document.getElementById('breezeOpenBtn');
     try {
         const r = await fetch(`${API_BASE}/api/breeze-login-url`);
-        const d = await r.json();
+        const d = await readJsonSafe(r);
         if (d.url) {
             breezeLoginUrl = d.url;
             if (linkEl) { linkEl.textContent = d.url; linkEl.style.display = 'block'; }
@@ -3006,7 +3023,7 @@ window.breezeSubmitToken = async function () {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ token }),
         });
-        const d = await r.json();
+        const d = await readJsonSafe(r);
         if (d.success) {
             if (msg) { msg.textContent = '✓ Connected — live broker feed active for today.'; msg.className = 'breeze-msg ok'; }
             if (inp) inp.value = '';
