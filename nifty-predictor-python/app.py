@@ -808,11 +808,12 @@ def breeze_auth():
     if not BREEZE_AVAILABLE:
         return jsonify({'success': False, 'message': 'Breeze SDK not installed'}), 503
     if breeze_manager.set_session_token(token):
-        return jsonify({'success': True})
+        return jsonify({'success': True,
+                        'warning': getattr(breeze_manager, 'last_error', '') or None})
     login = breeze_login_url()
     return jsonify({
         'success': False,
-        'message': 'Breeze auth failed — token may be expired. Mint a fresh one.',
+        'message': getattr(breeze_manager, 'last_error', '') or 'Breeze auth failed — token may be expired. Mint a fresh one.',
         'login_url': login,
         'code': 'BREEZE_AUTH_EXPIRED'
     }), 401

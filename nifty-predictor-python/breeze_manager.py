@@ -48,6 +48,7 @@ class BreezeManager:
         self.api_key = BREEZE_API_KEY or ""
         self.secret_key = BREEZE_SECRET_KEY or ""
         self.session_token = None
+        self.last_error = ''  # precise reason surfaced to UI when auth fails
         
         # Exact stock codes for Breeze indices
         self.symbols = {
@@ -317,41 +318,90 @@ class BreezeManager:
             return f"https://api.icicidirect.com/api/v2/login?api_key={self.api_key}"
         return breeze_login_url()
 
+    @staticmethod
+    def _extract_apisession(raw: str) -> str:
+        """Accept a bare apisession token OR a full ICICI redirect URL."""
+        t = (raw or '').strip().strip('"').strip("'").strip()
+        if 'apisession=' in t.lower():
+            import re
+            from urllib.parse import parse_qs
+            q = t.split('?', 1)[1] if '?' in t else t
+            q = q.split('#', 1)[0]
+            try:
+                params = parse_qs(q, keep_blank_values=True)
+                for k, v in params.items():
+                    if k.lower() == 'apisession' and v and v[0].strip():
+                        return v[0].strip()
+            except Exception:
+                pass
+            m = re.search(r'apisession=([^&\s#]+)', t, re.IGNORECASE)
+            if m:
+                return m.group(1).strip()
+            return ''
+        return t.split()[0] if t.split() else ''
+
     def set_session_token(self, session_token: str):
-        """Initialize session. Never logs the token value."""
-        if not session_token or not session_token.strip():
+        """Staged auth with precise, surfaced errors. Never logs the token.
+
+        Stage 1 (light auth check) is the true verdict. The heavy
+        security-master download can fail on network/CDN flakiness even for
+        valid tokens, so it is non-fatal by design.
+        """
+        self.last_error = ''
+        clean = self._extract_apisession(session_token)
+        if not clean:
+            self.last_error = 'empty token — paste the apisession token or the full ICICI redirect URL'
             print("[BREEZE] Empty session token rejected.")
             return False
         if not self.api_key or not self.secret_key:
+            self.last_error = 'API key/secret missing in server secrets'
             print("[BREEZE] API key/secret missing in secrets — cannot authenticate.")
             return False
         if not self.breeze:
             self._connect()
-
         if not self.breeze:
+            self.last_error = 'Breeze SDK unavailable on server'
             return False
-
+        # Stage 1: light auth check — the SDK raises precise errors here
+        # ("check session key" / "check app key" / "expired").
         try:
-            self.breeze.generate_session(api_secret=self.secret_key,
-                                         session_token=session_token.strip())
-            self.connected = True
-            self.session_token = session_token.strip()
-            # Verify the session actually works before declaring success
-            try:
-                probe = self.breeze.get_quotes(stock_code='NIFTY', exchange_code='NSE',
-                                               product_type='cash')
-                if not (probe and probe.get('Success')):
-                    raise RuntimeError(f"verification failed: {probe}")
-            except Exception as ve:
-                print(f"[BREEZE] Session created but verification failed: {ve}")
-                self.connected = False
-                return False
-            print("[BREEZE] Session authenticated & verified.")
-            return True
+            self.breeze.session_key = clean
+            self.breeze.secret_key = self.secret_key
+            self.breeze.api_util()
         except Exception as e:
-            print(f"[BREEZE] Session auth failed: {e}")
+            self.last_error = f"Breeze rejected the credentials: {e}"
+            print(f"[BREEZE] Auth rejected: {e}")
             self.connected = False
             return False
+        # Stage 2: heavy security-master download — NON-FATAL.
+        try:
+            self.breeze.get_stock_script_list()
+        except Exception as e:
+            print(f"[BREEZE] WARNING: security-master download failed ({e}) — "
+                  "continuing; quotes/history unaffected.")
+        # Stage 3: attach API handler (SDK generate_session's final step).
+        try:
+            from breeze_connect.breeze_connect import ApificationBreeze
+            self.breeze.api_handler = ApificationBreeze(self.breeze)
+        except Exception as e:
+            self.last_error = f"SDK handler init failed: {e}"
+            print(f"[BREEZE] api_handler init failed: {e}")
+            self.connected = False
+            return False
+        self.connected = True
+        self.session_token = clean
+        # Stage 4: verify via the EXACT production path (non-fatal — stage 1
+        # already proved the token; a probe failure is a feed issue, not auth).
+        try:
+            probe = self.get_live_price('nifty')
+            if not probe or not probe.get('ltp'):
+                raise RuntimeError("quote probe returned no data")
+            print("[BREEZE] Session authenticated & verified.")
+        except Exception as ve:
+            print(f"[BREEZE] WARNING: session valid but quote probe failed: {ve}")
+            self.last_error = (f"token accepted, but live probe failed ({ve}) — "
+                               "feed may still work; check server logs")
+        return True
 
     def status(self):
         """Safe status for APIs/logs — never includes secret values."""

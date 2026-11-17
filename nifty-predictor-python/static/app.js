@@ -3016,7 +3016,7 @@ window.breezeSubmitToken = async function () {
         return;
     }
     if (btn) btn.disabled = true;
-    if (msg) { msg.textContent = 'Connecting…'; msg.className = 'breeze-msg'; }
+    if (msg) { msg.textContent = (/apisession=/i.test(token) ? 'URL detected — extracting token…' : 'Connecting…'); msg.className = 'breeze-msg'; }
     try {
         const r = await fetch(`${API_BASE}/api/breeze-auth`, {
             method: 'POST',
@@ -3025,7 +3025,7 @@ window.breezeSubmitToken = async function () {
         });
         const d = await readJsonSafe(r);
         if (d.success) {
-            if (msg) { msg.textContent = '✓ Connected — live broker feed active for today.'; msg.className = 'breeze-msg ok'; }
+            if (msg) { msg.textContent = d.warning ? ('✓ Connected — note: ' + d.warning) : '✓ Connected — live broker feed active for today.'; msg.className = 'breeze-msg ok'; }
             if (inp) inp.value = '';
             if (typeof toast === 'function') toast('Breeze connected for today ✓', true);
             await refreshBreezeStatus();
