@@ -343,9 +343,9 @@ class BreezeManager:
     def set_session_token(self, session_token: str):
         """Staged auth with precise, surfaced errors. Never logs the token.
 
-        Stage 1 (light auth check) is the true verdict. The heavy
-        security-master download can fail on network/CDN flakiness even for
-        valid tokens, so it is non-fatal by design.
+        Stage 1 (light auth check) is the true verdict. The SDK's heavy
+        security-master download is skipped entirely (OOM/timeout risk on
+        small workers; unused by our read-only calls).
         """
         self.last_error = ''
         clean = self._extract_apisession(session_token)
@@ -373,12 +373,14 @@ class BreezeManager:
             print(f"[BREEZE] Auth rejected: {e}")
             self.connected = False
             return False
-        # Stage 2: heavy security-master download — NON-FATAL.
-        try:
-            self.breeze.get_stock_script_list()
-        except Exception as e:
-            print(f"[BREEZE] WARNING: security-master download failed ({e}) — "
-                  "continuing; quotes/history unaffected.")
+        # Stage 2: SKIP the SDK's security-master ZIP download. It pulls and
+        # parses ICICI's entire script master (OOM/timeout risk on a 512MB
+        # free-tier worker — this was killing auth with HTTP 502), and none
+        # of our read-only calls (quotes/history/option-chain) use those
+        # dicts — only websocket tick resolvers do, which we don't use.
+        # Empty lists keep every SDK attribute present and safe.
+        self.breeze.stock_script_dict_list = [{}, {}, {}, {}, {}, {}]
+        self.breeze.token_script_dict_list = [{}, {}, {}, {}, {}, {}]
         # Stage 3: attach API handler (SDK generate_session's final step).
         try:
             from breeze_connect.breeze_connect import ApificationBreeze
