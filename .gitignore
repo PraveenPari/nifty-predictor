@@ -46,3 +46,7 @@ Thumbs.db
 # Unrelated Folders
 # ========================================================
 tsc pract/
+
+# Local credential overrides (never commit)
+**/config.local.js
+**/API_CONFIG_OVERRIDE*

@@ -98,6 +98,10 @@ def safe_status() -> Dict:
             "login_url_ready": bool(creds["api_key"]),
         },
         "angel_one": {
+            "api_key_set": bool(get_secret("ANGEL_ONE_API_KEY")),
+            "client_id_set": bool(get_secret("ANGEL_ONE_CLIENT_ID")),
+            "password_set": bool(get_secret("ANGEL_ONE_PASSWORD")),
+            "totp_set": bool(get_secret("ANGEL_ONE_TOTP_SECRET")),
             "configured": bool(get_secret("ANGEL_ONE_API_KEY")),
         },
         "flask_secret_set": bool(get_secret("SECRET_KEY") or get_secret("FLASK_SECRET_KEY")),

@@ -1,11 +1,28 @@
 // Angel One SmartAPI Configuration
+//
+// SECURITY: NEVER hardcode real credentials in this file — it ships to browsers.
+// Provide values at runtime via `window.API_CONFIG_OVERRIDE`, e.g. injected by
+// your server into the page before this script, or a local untracked file:
+//   window.API_CONFIG_OVERRIDE = {
+//     API_KEY: '...', SECRET_KEY: '...', CLIENT_CODE: '...',
+//     PASSWORD: '...', TOTP_SECRET: '...', AUTO_LOGIN: true
+//   };
 const API_CONFIG = {
-    API_KEY: 'ujRLiue0',
-    SECRET_KEY: '9f827dea-d345-4f62-9fb2-b4911e40d05e',
-    CLIENT_CODE: 'P812102',
-    PASSWORD: 2271, // <--- PUT YOUR PASSWORD HERE
-    TOTP_SECRET: '542WYM7GZSMT73TU625FXJAV2M',
-    AUTO_LOGIN: true // Enable zero-touch login
+    API_KEY: '',
+    SECRET_KEY: '',
+    CLIENT_CODE: '',
+    PASSWORD: '',
+    TOTP_SECRET: '',
+    AUTO_LOGIN: false // set true only when credentials are injected at runtime
 };
 
-window.API_CONFIG = API_CONFIG;
+if (typeof window !== 'undefined' && window.API_CONFIG_OVERRIDE) {
+    Object.assign(API_CONFIG, window.API_CONFIG_OVERRIDE);
+}
+
+if (typeof window !== 'undefined') {
+    window.API_CONFIG = API_CONFIG;
+}
+if (typeof module !== 'undefined') {
+    module.exports = API_CONFIG;
+}

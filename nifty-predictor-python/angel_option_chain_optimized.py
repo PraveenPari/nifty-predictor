@@ -203,12 +203,16 @@ class AngelOneOptionChain:
 # Test function
 if __name__ == "__main__":
     import json
+    import os
     
-    # Load credentials
-    api_key = "ujRLiue0"
-    client_code = "P812102"
-    password = "2271"
-    totp_secret = "542WYM7GZSMT73TU625FXJAV2M"
+    # Load credentials — from environment only (see .env.example)
+    api_key = os.getenv("ANGEL_ONE_API_KEY", "")
+    client_code = os.getenv("ANGEL_ONE_CLIENT_ID", "")
+    password = os.getenv("ANGEL_ONE_PASSWORD", "")
+    totp_secret = os.getenv("ANGEL_ONE_TOTP_SECRET", "")
+    if not all([api_key, client_code, password, totp_secret]):
+        print("Missing Angel One credentials in environment — see .env.example.")
+        raise SystemExit(1)
     
     print("=" * 80)
     print(" ANGEL ONE OPTION CHAIN - OPTIMIZED")

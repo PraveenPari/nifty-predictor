@@ -3,7 +3,7 @@ Breeze API Full Debug - Try Multiple Methods
 """
 from breeze_connect import BreezeConnect
 from datetime import datetime, timedelta
-from pro_config.api_config import BREEZE_API_KEY, BREEZE_SECRET_KEY
+from pro_config.api_config import BREEZE_API_KEY, BREEZE_SECRET_KEY, BREEZE_SESSION_TOKEN
 import json
 
 print("="*60)
@@ -12,7 +12,10 @@ print("="*60)
 
 # Initialize
 breeze = BreezeConnect(api_key=BREEZE_API_KEY)
-SESSION_TOKEN = "54455470"
+SESSION_TOKEN = BREEZE_SESSION_TOKEN or ""
+if not SESSION_TOKEN:
+    print("Set BREEZE_SESSION_TOKEN first (daily token via /api/breeze-login-url).")
+    raise SystemExit(1)
 
 print(f"\n[1] Authenticating...")
 try:

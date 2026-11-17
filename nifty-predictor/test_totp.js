@@ -1,7 +1,11 @@
 // Standalone TOTP Test
 // Since I can't easily require the browser js file, I'll paste the logic here to test.
 
-const secret = '542WYM7GZSMT73TU625FXJAV2M';
+const secret = process.env.ANGEL_ONE_TOTP_SECRET || '';
+if (!secret) {
+    console.error('Set ANGEL_ONE_TOTP_SECRET env var first.');
+    process.exit(1);
+}
 
 const base32Decode = function (base32) {
     const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';

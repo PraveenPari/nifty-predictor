@@ -1,6 +1,7 @@
 """
 Test Both Credential Combinations for Angel One
 """
+import os
 import pyotp
 from SmartApi import SmartConnect
 from datetime import datetime
@@ -9,9 +10,12 @@ print("=" * 80)
 print(" TESTING ANGEL ONE LOGIN - BOTH COMBINATIONS")
 print("=" * 80)
 
-# TOTP Secret (confirmed by user)
-totp_secret = "542WYM7GZSMT73TU625FXJAV2M"
-password = "2271"
+# Credentials — from environment only (see .env.example). Never hardcode.
+totp_secret = os.getenv("ANGEL_ONE_TOTP_SECRET", "")
+password = os.getenv("ANGEL_ONE_PASSWORD", "")
+if not totp_secret or not password:
+    print("Missing ANGEL_ONE_TOTP_SECRET / ANGEL_ONE_PASSWORD — see .env.example.")
+    raise SystemExit(1)
 
 # Generate TOTP
 totp_generator = pyotp.TOTP(totp_secret)
@@ -25,12 +29,12 @@ print()
 print("=" * 80)
 print(" COMBINATION 1: From User's Message")
 print("=" * 80)
-api_key_1 = "9f827dea-d345-4f62-9fb2-b4911e40d05e"
-client_code_1 = "ujRLiue0"
+api_key_1 = os.getenv("ANGEL_ONE_API_KEY", "")
+client_code_1 = os.getenv("ANGEL_ONE_CLIENT_ID", "")
 
-print(f"API Key: {api_key_1}")
-print(f"Client Code: {client_code_1}")
-print(f"Password: {password}")
+print(f"API Key: {api_key_1[:4]}... (masked)")
+print(f"Client Code: {client_code_1[:2]}... (masked)")
+print("Password: [hidden]")
 print(f"TOTP: {current_totp}")
 print()
 
@@ -43,8 +47,8 @@ try:
         print(f"   Session Token: {data_1['data'].get('jwtToken', '')[:30]}...")
         smart_api_1.terminateSession(client_code_1)
         print("\n🎉 SUCCESS! Use these credentials:")
-        print(f"   API_KEY={api_key_1}")
-        print(f"   CLIENT_ID={client_code_1}")
+        print(f"   API_KEY={api_key_1[:4]}... (masked)")
+        print(f"   CLIENT_ID={client_code_1[:2]}... (masked)")
         exit(0)
     else:
         print("❌ COMBINATION 1 FAILED")
@@ -59,12 +63,12 @@ print()
 print("=" * 80)
 print(" COMBINATION 2: From Old Configuration")
 print("=" * 80)
-api_key_2 = "ujRLiue0"
-client_code_2 = "P812102"
+api_key_2 = os.getenv("ANGEL_ONE_API_KEY_ALT", "") or api_key_1
+client_code_2 = os.getenv("ANGEL_ONE_CLIENT_ID_ALT", "") or client_code_1
 
-print(f"API Key: {api_key_2}")
-print(f"Client Code: {client_code_2}")
-print(f"Password: {password}")
+print(f"API Key: {api_key_2[:4]}... (masked)")
+print(f"Client Code: {client_code_2[:2]}... (masked)")
+print("Password: [hidden]")
 print(f"TOTP: {current_totp}")
 print()
 
@@ -77,8 +81,8 @@ try:
         print(f"   Session Token: {data_2['data'].get('jwtToken', '')[:30]}...")
         smart_api_2.terminateSession(client_code_2)
         print("\n🎉 SUCCESS! Use these credentials:")
-        print(f"   API_KEY={api_key_2}")
-        print(f"   CLIENT_ID={client_code_2}")
+        print(f"   API_KEY={api_key_2[:4]}... (masked)")
+        print(f"   CLIENT_ID={client_code_2[:2]}... (masked)")
         exit(0)
     else:
         print("❌ COMBINATION 2 FAILED")
@@ -91,14 +95,14 @@ print()
 
 # Combination 3: Mixed
 print("=" * 80)
-print(" COMBINATION 3: Mixed (Long API Key + P812102)")
+print(" COMBINATION 3: Mixed (Primary API Key + Alt Client ID)")
 print("=" * 80)
-api_key_3 = "9f827dea-d345-4f62-9fb2-b4911e40d05e"
-client_code_3 = "P812102"
+api_key_3 = api_key_1
+client_code_3 = client_code_2
 
-print(f"API Key: {api_key_3}")
-print(f"Client Code: {client_code_3}")
-print(f"Password: {password}")
+print(f"API Key: {api_key_3[:4]}... (masked)")
+print(f"Client Code: {client_code_3[:2]}... (masked)")
+print("Password: [hidden]")
 print(f"TOTP: {current_totp}")
 print()
 
@@ -111,8 +115,8 @@ try:
         print(f"   Session Token: {data_3['data'].get('jwtToken', '')[:30]}...")
         smart_api_3.terminateSession(client_code_3)
         print("\n🎉 SUCCESS! Use these credentials:")
-        print(f"   API_KEY={api_key_3}")
-        print(f"   CLIENT_ID={client_code_3}")
+        print(f"   API_KEY={api_key_3[:4]}... (masked)")
+        print(f"   CLIENT_ID={client_code_3[:2]}... (masked)")
         exit(0)
     else:
         print("❌ COMBINATION 3 FAILED")
@@ -126,7 +130,7 @@ print("=" * 80)
 print("❌ ALL COMBINATIONS FAILED!")
 print("=" * 80)
 print("\n💡 Please verify:")
-print("   1. Password is correct (current: 2271)")
+print("   1. ANGEL_ONE_PASSWORD is correct")
 print("   2. TOTP secret hasn't been regenerated")
 print("   3. Account is active and not locked")
 print("\n📞 You may need to contact Angel One support or regenerate credentials")

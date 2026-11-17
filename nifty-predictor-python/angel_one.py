@@ -1,9 +1,10 @@
 """
 Angel One SmartAPI Integration (Python)
-Uses real credentials to fetch live market data
+Credentials are read from environment variables (see .env.example)
 """
 
 from SmartApi import SmartConnect
+import os
 import pyotp
 import time
 import pandas as pd
@@ -117,10 +118,12 @@ class AngelOneManager:
             
         return []
 
-# Shared instance with YOUR credentials
+# Shared instance — credentials ONLY from environment (see .env.example).
+# Set ANGEL_ONE_API_KEY / ANGEL_ONE_CLIENT_ID / ANGEL_ONE_PASSWORD /
+# ANGEL_ONE_TOTP_SECRET in .env or host secrets.
 angel_manager = AngelOneManager(
-    api_key='ujRLiue0',
-    client_code='P812102',
-    password='2271',
-    totp_secret='542WYM7GZSMT73TU625FXJAV2M'
+    api_key=os.getenv('ANGEL_ONE_API_KEY', ''),
+    client_code=os.getenv('ANGEL_ONE_CLIENT_ID', ''),
+    password=os.getenv('ANGEL_ONE_PASSWORD', ''),
+    totp_secret=os.getenv('ANGEL_ONE_TOTP_SECRET', ''),
 )

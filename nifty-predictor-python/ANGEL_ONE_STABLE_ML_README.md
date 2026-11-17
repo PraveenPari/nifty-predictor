@@ -23,8 +23,8 @@ Edit the `.env` file with your Angel One credentials:
 
 ```bash
 # Angel One API Credentials
-ANGEL_ONE_API_KEY=9f827dea-d345-4f62-9fb2-b4911e40d05e
-ANGEL_ONE_CLIENT_ID=ujRLiue0
+ANGEL_ONE_API_KEY=your_angel_api_key_here
+ANGEL_ONE_CLIENT_ID=your_client_id_here
 ANGEL_ONE_PASSWORD=your_password_here
 ANGEL_ONE_TOTP_SECRET=your_totp_secret_here
 ```
@@ -138,7 +138,7 @@ Returns connection status for all data sources + ML model stats
 ```json
 {
   "angel_one_connected": true,
-  "angel_one_client": "ujRLiue0",
+  "angel_one_client": "your_client_id",
   "breeze_connected": false,
   "market_open": true,
   "yahoo_available": true,

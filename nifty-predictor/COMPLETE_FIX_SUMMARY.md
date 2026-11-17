@@ -45,7 +45,7 @@ App couldn't connect to Angel One API for live stock prices. Only got old Yahoo 
    API_CONFIG = {
        API_KEY: 'your_key',
        CLIENT_CODE: 'your_code',
-       PASSWORD: 2271,  // Your trading password
+       PASSWORD: 'your_trading_password',  // never commit real values
        TOTP_SECRET: 'your_secret',
        AUTO_LOGIN: true
    }

@@ -1,25 +1,29 @@
 """
 Debug TOTP and Angel One Login
 """
+import os
 import pyotp
 from datetime import datetime
 import time
 
-# Your credentials
-api_key = "9f827dea-d345-4f62-9fb2-b4911e40d05e"
-client_code = "ujRLiue0"
-password = "2271"
-totp_secret = "542WYM7GZSMT73TU625FXJAV2M"
+# Credentials — from environment only (see .env.example). Never hardcode.
+api_key = os.getenv("ANGEL_ONE_API_KEY", "")
+client_code = os.getenv("ANGEL_ONE_CLIENT_ID", "")
+password = os.getenv("ANGEL_ONE_PASSWORD", "")
+totp_secret = os.getenv("ANGEL_ONE_TOTP_SECRET", "")
+if not all([api_key, client_code, password, totp_secret]):
+    print("Missing Angel One credentials in environment — see .env.example.")
+    raise SystemExit(1)
 
 print("=" * 80)
 print(" ANGEL ONE LOGIN DEBUG")
 print("=" * 80)
 
 print(f"\n📋 Credentials:")
-print(f"   API Key: {api_key}")
-print(f"   Client Code: {client_code}")
-print(f"   Password: {password}")
-print(f"   TOTP Secret: {totp_secret}")
+print(f"   API Key: {api_key[:4]}...{api_key[-2:] if len(api_key) > 6 else ''}")
+print(f"   Client Code: {'set' if client_code else 'MISSING'}")
+print(f"   Password: {'set' if password else 'MISSING'}")
+print(f"   TOTP Secret: {'set' if totp_secret else 'MISSING'}")
 
 print(f"\n⏰ Time Information:")
 print(f"   Current Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
@@ -84,8 +88,8 @@ try:
             print(f"   3. Try using the PREVIOUS or NEXT TOTP from the sequence above")
         elif data.get('errorCode') == 'AG8001':
             print(f"\n⚠️  Client Code is invalid!")
-            print(f"   Current: {client_code}")
-            print(f"   Try: P812102 (from old config)")
+            print(f"   Current: {'set' if client_code else 'MISSING'} (masked)")
+            print(f"   Check ANGEL_ONE_CLIENT_ID in your .env / host secrets")
         elif data.get('errorCode') == 'AG8002':
             print(f"\n⚠️  Password is invalid!")
             print(f"   Please verify your password")
