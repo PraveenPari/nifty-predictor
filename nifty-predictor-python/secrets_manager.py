@@ -83,7 +83,8 @@ def breeze_login_url() -> Optional[str]:
     api_key = get_secret("BREEZE_API_KEY")
     if not api_key:
         return None
-    return f"https://api.icicidirect.com/api/v2/login?api_key={api_key}"
+    from urllib.parse import quote_plus
+    return f"https://api.icicidirect.com/apiuser/login?api_key={quote_plus(api_key)}"
 
 
 def safe_status() -> Dict:

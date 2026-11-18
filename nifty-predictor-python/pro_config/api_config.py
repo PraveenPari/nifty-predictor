@@ -29,9 +29,9 @@ RETRY_DELAY = 1  # seconds
 CACHE_DURATION = 5  # seconds
 TIMEOUT = 30  # seconds
 
-if not BREEZE_CONFIGURED:
-    print("[SECRETS] Breeze secrets not fully set — Breeze features disabled, "
-          "Yahoo fallback active. Set BREEZE_API_KEY / BREEZE_SECRET_KEY / "
-          "BREEZE_SESSION_TOKEN to enable live broker data.")
+if not BREEZE_API_KEY or not BREEZE_SECRET_KEY:
+    print("[SECRETS] Set BREEZE_API_KEY and BREEZE_SECRET_KEY to enable Breeze.")
+elif not BREEZE_SESSION_TOKEN:
+    print("[SECRETS] Breeze keys configured; connect a session in the dashboard.")
 else:
     print(f"[SECRETS] Breeze configured (key {mask(BREEZE_API_KEY)}).")

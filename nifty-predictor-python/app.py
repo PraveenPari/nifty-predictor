@@ -806,25 +806,26 @@ def breeze_auth():
     if not token:
         return jsonify({'success': False, 'message': 'Missing session token'}), 400
     if not BREEZE_AVAILABLE:
-        return jsonify({'success': False, 'message': 'Breeze SDK not installed'}), 503
+        return jsonify({'success': False, 'message': 'Breeze integration unavailable on server'}), 503
     try:
         authed = breeze_manager.set_session_token(token)
     except Exception as e:  # last-resort guard: always JSON, never a dead worker
-        print(f"[BREEZE] /api/breeze-auth guard caught: {e}")
+        print(f"[BREEZE] /api/breeze-auth guard caught: {type(e).__name__}")
         return jsonify({'success': False,
-                        'message': f'Breeze auth error: {e}',
+                        'message': 'Breeze authentication failed unexpectedly.',
                         'code': 'BREEZE_AUTH_ERROR'}), 500
     if authed:
         return jsonify({'success': True,
                         'warning': getattr(breeze_manager, 'last_error', '') or None,
                         'probe': getattr(breeze_manager, 'last_probe', None)})
-    login = breeze_login_url()
+    code = getattr(breeze_manager, 'last_error_code', '') or 'BREEZE_AUTH_ERROR'
+    status = 400 if code == 'BREEZE_TOKEN_MISSING' else 401 if code == 'BREEZE_AUTH_REJECTED' else 503
     return jsonify({
         'success': False,
-        'message': getattr(breeze_manager, 'last_error', '') or 'Breeze auth failed — token may be expired. Mint a fresh one.',
-        'login_url': login,
-        'code': 'BREEZE_AUTH_EXPIRED'
-    }), 401
+        'message': getattr(breeze_manager, 'last_error', '') or 'Breeze authentication failed.',
+        'login_url': breeze_login_url(),
+        'code': code
+    }), status
 
 
 # ---------------------------------------------------------------------------

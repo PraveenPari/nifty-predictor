@@ -1,73 +1,17 @@
 """
 Breeze API Data Manager
-Primary data source with 100% working implementation for Indices
+Breeze REST market data for indices
 """
 
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 import threading
 from typing import Dict, List, Optional
-import os
 
-# Import Breeze with full error handling
-BREEZE_AVAILABLE = False
-BreezeConnect = None
-
-try:
-    from breeze_connect import BreezeConnect
-    BREEZE_AVAILABLE = True
-    print("Breeze SDK loaded successfully")
-except ImportError as e:
-    print(f"CRITICAL: breeze_connect not installed: {e}")
-except Exception as e:
-    print(f"CRITICAL: Breeze import error: {e}")
-
-from pro_config.api_config import BREEZE_API_KEY, BREEZE_SECRET_KEY, BREEZE_SESSION_TOKEN, CACHE_DURATION, RETRY_ATTEMPTS
+from breeze_rest import BreezeRest, BreezeError, BreezeAPIError, BreezeSessionError
+from pro_config.api_config import BREEZE_API_KEY, BREEZE_SECRET_KEY, BREEZE_SESSION_TOKEN, CACHE_DURATION
 from secrets_manager import mask, breeze_login_url
-
-
-def _is_auth_error(exc: Exception) -> bool:
-    """Detect expired/invalid session so we can ask for re-auth instead of retrying."""
-    msg = str(exc).lower()
-    return any(k in msg for k in (
-        "session", "token", "auth", "unauthor", "expired", "invalid",
-        "403", "401", "customer", "apikey", "api key",
-    ))
-
-
-# Network guard: ICICI's SDK makes requests with NO socket timeout
-# (api_util, make_request, historical_v2). A hung ICICI socket would block a
-# worker thread forever -> gunicorn kill -> HTTP 502. Every SDK network call
-# below runs under _call_guarded instead: worst case a clean error/None and
-# the caller falls back. Worst-case auth (25s + 15s) stays well under the
-# gunicorn 120s worker timeout.
-BREEZE_AUTH_TIMEOUT = int(os.environ.get('BREEZE_AUTH_TIMEOUT', '25'))
-BREEZE_QUOTE_TIMEOUT = int(os.environ.get('BREEZE_QUOTE_TIMEOUT', '15'))
-
-
-def _call_guarded(fn, timeout, label):
-    """Run fn() under a watchdog. Returns (True, result) or (False, error).
-
-    TimeoutError on hang — the caller converts it to a clean message.
-    The orphaned daemon thread can never block a response or kill a worker.
-    """
-    box = {}
-
-    def _target():
-        try:
-            box['result'] = fn()
-        except Exception as e:  # transport back to the calling thread
-            box['error'] = e
-
-    t = threading.Thread(target=_target, daemon=True)
-    t.start()
-    t.join(timeout)
-    if t.is_alive():
-        return False, TimeoutError(
-            f"{label} timed out after {timeout}s (ICICI not responding)")
-    if 'error' in box:
-        return False, box['error']
-    return True, box.get('result')
 
 
 class BreezeManager:
@@ -79,11 +23,13 @@ class BreezeManager:
         self.cache = {}
         self.cache_time = {}
         self.lock = threading.Lock()
+        self.auth_lock = threading.Lock()
         self.init_attempted = False
         self.api_key = BREEZE_API_KEY or ""
         self.secret_key = BREEZE_SECRET_KEY or ""
         self.session_token = None
-        self.last_error = ''  # precise reason surfaced to UI when auth fails
+        self.last_error = ''  # safe reason surfaced to UI when auth fails
+        self.last_error_code = ''
         self.last_probe = None  # last verified quote (proof of live feed)
         
         # Exact stock codes for Breeze indices
@@ -91,25 +37,6 @@ class BreezeManager:
             'nifty': {'exchange': 'nse', 'stock_code': 'NIFTY', 'product_type': 'cash'},
             'banknifty': {'exchange': 'nse', 'stock_code': 'CNXBAN', 'product_type': 'cash'}
         }
-    
-    def _connect(self):
-        """Initialize Breeze SDK object"""
-        if self.breeze is not None:
-            return True
-            
-        if not BREEZE_AVAILABLE or BreezeConnect is None:
-            return False
-            
-        if not self.api_key:
-            print("[BREEZE] No API key in secrets — set BREEZE_API_KEY to enable.")
-            return False
-        try:
-            print(f"[BREEZE] Initializing BreezeConnect (key {mask(self.api_key)})")
-            self.breeze = BreezeConnect(api_key=self.api_key)
-            return True
-        except Exception as e:
-            print(f"[BREEZE] BreezeConnect init failed: {e}")
-            return False
     
     def _is_cache_valid(self, key: str) -> bool:
         if key not in self.cache_time:
@@ -135,49 +62,51 @@ class BreezeManager:
         try:
             sym = self.symbols[index_key]
             # print(f"DEBUG: Fetching live price for {index} (code: {sym['stock_code']})...")
-            # Watchdog: SDK make_request() has NO socket timeout.
-            ok, quote = _call_guarded(
-                lambda: self.breeze.get_quotes(
-                    stock_code=sym['stock_code'],
-                    exchange_code=sym['exchange'],
-                    product_type=sym['product_type']),
-                BREEZE_QUOTE_TIMEOUT, f"{index_key} quote")
-            if not ok:
-                raise quote
-            
+            client = self.breeze
+            quote = client.get_quotes(
+                stock_code=sym['stock_code'], exchange_code=sym['exchange'],
+                product_type=sym['product_type'])
+
             if quote and 'Success' in quote and quote['Success']:
                 data = quote['Success'][0]
                 # SDK might return ltp as string
                 ltp = float(data.get('ltp', 0) or data.get('last', 0))
-                open_price = float(data.get('open', ltp))
-                change = round(((ltp - open_price) / open_price) * 100, 2) if open_price else 0
+                if ltp <= 0:
+                    return None
+                previous_close = float(data.get('previous_close') or 0)
+                pct = data.get('ltp_percent_change')
+                change = float(pct) if pct is not None and pct != '' else (round((ltp - previous_close) / previous_close * 100, 2) if previous_close else 0)
                 
                 # print(f"DEBUG: {index} Price: {ltp}, Change: {change}%")
                 
                 result = {
                     'ltp': round(ltp, 2),
                     'change': change,
-                    'high': float(data.get('high', ltp)),
-                    'low': float(data.get('low', ltp)),
-                    'source': 'Breeze'
+                    'high': float(data.get('high') or ltp),
+                    'low': float(data.get('low') or ltp),
+                    'source': 'Breeze',
+                    'last_trade_time': data.get('ltt')
                 }
                 
                 with self.lock:
-                    self.cache[cache_key] = result
-                    self.cache_time[cache_key] = time.time()
+                    if self.breeze is client:
+                        self.cache[cache_key] = result
+                        self.cache_time[cache_key] = time.time()
                 return result
             else:
-                print(f"WARNING: Breeze get_quotes returned empty or failure: {quote}")
-        except Exception as e:
-            if isinstance(e, TimeoutError):
-                print(f"[BREEZE] {e} — serving cache/fallback instead.")
-            elif _is_auth_error(e):
-                print(f"[BREEZE] Session looks expired ({e}). "
-                      f"Mint a fresh token via the login URL and update BREEZE_SESSION_TOKEN.")
-                self.connected = False
+                print("[BREEZE] Quote response contained no data.")
+        except BreezeSessionError:
             with self.lock:
-                if cache_key in self.cache:
-                    return self.cache[cache_key]
+                if self.breeze is client:
+                    self.connected = False
+                    self.session_token = None
+                    self.last_probe = None
+                    self.cache.clear()
+                    self.cache_time.clear()
+            print("[BREEZE] Session invalid or expired; reconnect.")
+            return None
+        except (BreezeError, ValueError, TypeError, KeyError, IndexError) as e:
+            print(f"[BREEZE] Quote unavailable ({type(e).__name__}); using fallback.")
             return None
 
     def get_historical_data(self, index: str = 'nifty', interval: str = '5minute', 
@@ -199,23 +128,18 @@ class BreezeManager:
         breeze_interval = interval_map.get(interval, '5minute')
         
         try:
-            to_date = datetime.now()
+            to_date = datetime.now(ZoneInfo("Asia/Kolkata"))
             from_date = to_date - timedelta(days=days)
+            start = from_date.replace(hour=9, minute=15, second=0, microsecond=0).astimezone(timezone.utc)
+            end = to_date.replace(hour=15, minute=30, second=0, microsecond=0).astimezone(timezone.utc)
             
-            # Use V2 for indices as it's more reliable
-            # Watchdog: SDK historical_v2 has NO socket timeout.
-            ok, historical = _call_guarded(
-                lambda: self.breeze.get_historical_data_v2(
-                    interval=breeze_interval,
-                    from_date=from_date.strftime("%Y-%m-%dT09:15:00.000Z"),
-                    to_date=to_date.strftime("%Y-%m-%dT15:30:00.000Z"),
-                    stock_code=sym['stock_code'],
-                    exchange_code=sym['exchange'],
-                    product_type=sym['product_type']),
-                BREEZE_QUOTE_TIMEOUT, f"{index_key} history")
-            if not ok:
-                raise historical
-            
+            historical = self.breeze.get_historical_data_v2(
+                interval=breeze_interval,
+                from_date=start.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+                to_date=end.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+                stock_code=sym['stock_code'], exchange_code=sym['exchange'],
+                product_type=sym['product_type'])
+
             if historical and 'Success' in historical and historical['Success']:
                 candles = []
                 for row in historical['Success']:
@@ -247,58 +171,38 @@ class BreezeManager:
             spot = quote['ltp'] if quote else 0
             
             # Calculate next expiry
-            today = datetime.now()
+            today = datetime.now(ZoneInfo("Asia/Kolkata"))
             
-            # Dynamic expiry discovery: check from today to next 10 days,
-            # in both date formats Breeze has accepted over time.
+            # Probe nearby dates using the ISO-8601 format documented by Breeze.
             cached_exp = self.cache.get(f"{index_key}_expiry")
             expiries_to_try = [cached_exp] if cached_exp else []
             for offset in range(0, 11):
                 day = today + timedelta(days=offset)
-                for fmt in ("%Y-%m-%d", "%d-%b-%Y"):
-                    exp_dt = day.strftime(fmt)
-                    if exp_dt not in expiries_to_try:
-                        expiries_to_try.append(exp_dt)
+                exp_dt = day.strftime("%Y-%m-%dT06:00:00.000Z")
+                if exp_dt not in expiries_to_try:
+                    expiries_to_try.append(exp_dt)
 
             chain_data = []
             used_expiry = ""
 
             for expiry_str in expiries_to_try:
                 try:
-                    # Fetch Call Option Chain (watchdog: SDK has NO socket timeout)
-                    ok, oc_calls = _call_guarded(
-                        lambda exp=expiry_str: self.breeze.get_option_chain_quotes(
-                            stock_code=sym['stock_code'],
-                            exchange_code='NFO',
-                            product_type='options',
-                            expiry_date=exp,
-                            right="call",
-                            strike_price=""),
-                        BREEZE_QUOTE_TIMEOUT, f"{index_key} option-chain")
-                    if not ok:
-                        raise oc_calls
-                    
+                    oc_calls = self.breeze.get_option_chain_quotes(
+                        stock_code=sym['stock_code'], exchange_code='NFO',
+                        product_type='options', expiry_date=expiry_str,
+                        right='call', strike_price='')
                     if not oc_calls or not oc_calls.get('Success'):
                         continue
+                    oc_puts = self.breeze.get_option_chain_quotes(
+                        stock_code=sym['stock_code'], exchange_code='NFO',
+                        product_type='options', expiry_date=expiry_str,
+                        right='put', strike_price='')
 
-                    # Fetch Put Option Chain
-                    ok, oc_puts = _call_guarded(
-                        lambda exp=expiry_str: self.breeze.get_option_chain_quotes(
-                            stock_code=sym['stock_code'],
-                            exchange_code='NFO',
-                            product_type='options',
-                            expiry_date=exp,
-                            right="put",
-                            strike_price=""),
-                        BREEZE_QUOTE_TIMEOUT, f"{index_key} option-chain")
-                    if not ok:
-                        raise oc_puts
-                    
                     if oc_calls.get('Success') or (oc_puts and oc_puts.get('Success')):
                         self.cache[f"{index_key}_expiry"] = expiry_str
                         print(f"DEBUG: Found option chain data with expiry {expiry_str}")
-                        calls = {x['strike_price']: x for x in oc_calls.get('Success', [])}
-                        puts = {x['strike_price']: x for x in oc_puts.get('Success', [])}
+                        calls = {float(x['strike_price']): x for x in oc_calls.get('Success', [])}
+                        puts = {float(x['strike_price']): x for x in (oc_puts.get('Success') or [])}
                         
                         # Get all unique strikes
                         all_strikes = set(calls.keys()) | set(puts.keys())
@@ -329,9 +233,11 @@ class BreezeManager:
                     else:
                         print(f"DEBUG: No data for {expiry_str}. Retrying next expiry...")
                         
-                except TimeoutError as te:
-                    # ICICI hanging — don't burn 15s x 22 expiries; Yahoo now.
-                    print(f"[BREEZE] {te} — aborting option-chain scan, Yahoo fallback.")
+                except BreezeAPIError:
+                    # A date without an expiry can be rejected by the API.
+                    continue
+                except BreezeError:
+                    print("[BREEZE] Option-chain request failed; using fallback.")
                     break
                 except Exception as ex:
                     print(f"DEBUG: API Call Failed for {expiry_str}: {ex}")
@@ -370,8 +276,6 @@ class BreezeManager:
 
     def generate_session_token(self):
         """Get login URL (uses key from secrets only)."""
-        if self.api_key:
-            return f"https://api.icicidirect.com/api/v2/login?api_key={self.api_key}"
         return breeze_login_url()
 
     @staticmethod
@@ -397,83 +301,50 @@ class BreezeManager:
         return t.split()[0] if t.split() else ''
 
     def set_session_token(self, session_token: str):
-        """Staged auth with precise, surfaced errors. Never logs the token.
+        """Authenticate with the documented customer-details API; probe a fresh quote.
 
-        Stage 1 (light auth check) is the true verdict. The SDK's heavy
-        security-master download is skipped entirely (OOM/timeout risk on
-        small workers; unused by our read-only calls).
+        Credentials and the resulting session remain in process memory only.
+        A restart or worker replacement requires a fresh Connect.
         """
-        self.last_error = ''
-        clean = self._extract_apisession(session_token)
-        if not clean:
-            self.last_error = 'empty token — paste the apisession token or the full ICICI redirect URL'
-            print("[BREEZE] Empty session token rejected.")
-            return False
-        if not self.api_key or not self.secret_key:
-            self.last_error = 'API key/secret missing in server secrets'
-            print("[BREEZE] API key/secret missing in secrets — cannot authenticate.")
-            return False
-        if not self.breeze:
-            self._connect()
-        if not self.breeze:
-            self.last_error = 'Breeze SDK unavailable on server'
-            return False
-        # Stage 1: light auth check — the SDK raises precise errors here
-        # ("check session key" / "check app key" / "expired").
-        try:
-            self.breeze.session_key = clean
-            self.breeze.secret_key = self.secret_key
-            # Watchdog: SDK api_util() has NO socket timeout — a hung ICICI
-            # would block the worker thread forever (gunicorn kill -> 502).
-            ok, res = _call_guarded(self.breeze.api_util, BREEZE_AUTH_TIMEOUT,
-                                    'Breeze login check')
-            if not ok:
-                raise res
-        except Exception as e:
-            if isinstance(e, TimeoutError):
-                self.last_error = (f"Breeze login service did not respond in "
-                                   f"{BREEZE_AUTH_TIMEOUT}s — network/timeout at ICICI. "
-                                   f"Try Connect again.")
-                print(f"[BREEZE] Auth timed out ({e}) — SDK object discarded, worker safe.")
-                self.breeze = None  # orphan any late-finishing socket thread
-            else:
-                self.last_error = f"Breeze rejected the credentials: {e}"
-                print(f"[BREEZE] Auth rejected: {e}")
-            self.connected = False
-            return False
-        # Stage 2: SKIP the SDK's security-master ZIP download. It pulls and
-        # parses ICICI's entire script master (OOM/timeout risk on a 512MB
-        # free-tier worker — this was killing auth with HTTP 502), and none
-        # of our read-only calls (quotes/history/option-chain) use those
-        # dicts — only websocket tick resolvers do, which we don't use.
-        # Empty lists keep every SDK attribute present and safe.
-        self.breeze.stock_script_dict_list = [{}, {}, {}, {}, {}, {}]
-        self.breeze.token_script_dict_list = [{}, {}, {}, {}, {}, {}]
-        # Stage 3: attach API handler (SDK generate_session's final step).
-        try:
-            from breeze_connect.breeze_connect import ApificationBreeze
-            self.breeze.api_handler = ApificationBreeze(self.breeze)
-        except Exception as e:
-            self.last_error = f"SDK handler init failed: {e}"
-            print(f"[BREEZE] api_handler init failed: {e}")
-            self.connected = False
-            return False
-        self.connected = True
-        self.session_token = clean
-        # Stage 4: verify via the EXACT production path (non-fatal — stage 1
-        # already proved the token; a probe failure is a feed issue, not auth).
-        try:
+        with self.auth_lock:
+            self.last_error = ''
+            self.last_error_code = ''
+            self.last_probe = None
+            clean = self._extract_apisession(session_token)
+            if not clean:
+                self.last_error_code = 'BREEZE_TOKEN_MISSING'
+                self.last_error = 'Empty token — paste the apisession token or redirect URL'
+                return False
+            if not self.api_key or not self.secret_key:
+                self.last_error_code = 'BREEZE_NOT_CONFIGURED'
+                self.last_error = 'API key/secret missing in server secrets'
+                return False
+            client = BreezeRest(self.api_key, self.secret_key)
+            try:
+                client.authenticate(clean)
+            except BreezeError as exc:
+                self.last_error_code = 'BREEZE_AUTH_REJECTED' if isinstance(exc, BreezeAPIError) else 'BREEZE_UNAVAILABLE'
+                self.last_error = str(exc)
+                print(f"[BREEZE] Authentication failed: {exc}")
+                return False
+            with self.lock:
+                self.cache.clear()
+                self.cache_time.clear()
+                self.breeze = client
+                self.connected = True
+                self.session_token = clean
             probe = self.get_live_price('nifty')
-            if not probe or not probe.get('ltp'):
-                raise RuntimeError("quote probe returned no data")
-            self.last_probe = {'ltp': probe.get('ltp'), 'change': probe.get('change'),
-                               'source': probe.get('source', 'Breeze')}
-            print(f"[BREEZE] Session authenticated & verified (NIFTY {probe.get('ltp')}).")
-        except Exception as ve:
-            print(f"[BREEZE] WARNING: session valid but quote probe failed: {ve}")
-            self.last_error = (f"token accepted, but live probe failed ({ve}) — "
-                               "feed may still work; check server logs")
-        return True
+            if not self.connected:
+                self.last_error_code = 'BREEZE_AUTH_REJECTED'
+                self.last_error = 'Breeze session expired or invalid; reconnect'
+                return False
+            if probe and probe.get('ltp'):
+                self.last_probe = {k: probe.get(k) for k in ('ltp', 'change', 'source', 'last_trade_time')}
+                print("[BREEZE] Session authenticated; quote probe returned data.")
+            else:
+                self.last_error = 'Login accepted, but the NIFTY quote probe returned no data.'
+                print("[BREEZE] Login accepted, but NIFTY quote probe failed.")
+            return True
 
     def status(self):
         """Safe status for APIs/logs — never includes secret values."""

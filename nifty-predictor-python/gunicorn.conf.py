@@ -10,8 +10,8 @@ graceful_timeout = 30
 keepalive = 5
 
 preload_app = False  # each worker boots its own ML state cleanly
-max_requests = 500   # recycle workers to bound memory on tiny dynos
-max_requests_jitter = 50
+max_requests = 0  # A recycled worker would silently lose the in-memory Breeze session.
+max_requests_jitter = 0
 
 accesslog = "-"
 errorlog = "-"

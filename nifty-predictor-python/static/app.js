@@ -3025,16 +3025,20 @@ window.breezeSubmitToken = async function () {
         });
         const d = await readJsonSafe(r);
         if (d.success) {
-            if (msg) { const live = (d.probe && d.probe.ltp) ? (' — NIFTY ₹' + Number(d.probe.ltp).toLocaleString('en-IN') + ' live') : ' — live broker feed active for today.'; msg.textContent = d.warning ? ('✓ Connected — note: ' + d.warning) : ('✓ Connected' + live); msg.className = 'breeze-msg ok'; }
+            if (msg) {
+                const quote = d.probe && d.probe.ltp ? (' — NIFTY ₹' + Number(d.probe.ltp).toLocaleString('en-IN') + (d.probe.last_trade_time ? ' · last trade ' + d.probe.last_trade_time : '')) : '';
+                msg.textContent = d.warning ? ('Login accepted, but quote not verified: ' + d.warning) : ('✓ Breeze quote received' + quote);
+                msg.className = d.warning ? 'breeze-msg err' : 'breeze-msg ok';
+            }
             if (inp) inp.value = '';
-            if (typeof toast === 'function') toast('Breeze connected for today ✓', true);
+            if (typeof toast === 'function' && !d.warning) toast('Breeze quote received ✓', true);
             await refreshBreezeStatus();
-            setTimeout(() => window.closeBreezeModal(), 1400);
+            if (!d.warning) setTimeout(() => window.closeBreezeModal(), 1400);
         } else {
             throw new Error(d.message || 'auth failed — token may be expired');
         }
     } catch (e) {
-        if (msg) { msg.textContent = '✕ ' + e.message + ' — mint a fresh token (step 1).'; msg.className = 'breeze-msg err'; }
+        if (msg) { msg.textContent = '✕ ' + e.message; msg.className = 'breeze-msg err'; }
     }
     if (btn) btn.disabled = false;
 };
