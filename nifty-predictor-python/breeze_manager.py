@@ -430,7 +430,8 @@ if BREEZE_SESSION_TOKEN:
     if breeze_manager.set_session_token(BREEZE_SESSION_TOKEN):
         print("[BREEZE] Auto-connected successfully!")
     else:
-        print("[BREEZE] Auto-connect failed - token may be expired. Login via /api/breeze-login-url")
+        print(f"[BREEZE] Auto-connect failed: {breeze_manager.last_error or 'unknown reason'}. "
+              "Login via /api/breeze-login-url")
 else:
     print("[BREEZE] No session token in .env. Set BREEZE_SESSION_TOKEN or login via /api/breeze-login-url")
 
