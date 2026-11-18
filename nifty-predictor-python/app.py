@@ -807,7 +807,14 @@ def breeze_auth():
         return jsonify({'success': False, 'message': 'Missing session token'}), 400
     if not BREEZE_AVAILABLE:
         return jsonify({'success': False, 'message': 'Breeze SDK not installed'}), 503
-    if breeze_manager.set_session_token(token):
+    try:
+        authed = breeze_manager.set_session_token(token)
+    except Exception as e:  # last-resort guard: always JSON, never a dead worker
+        print(f"[BREEZE] /api/breeze-auth guard caught: {e}")
+        return jsonify({'success': False,
+                        'message': f'Breeze auth error: {e}',
+                        'code': 'BREEZE_AUTH_ERROR'}), 500
+    if authed:
         return jsonify({'success': True,
                         'warning': getattr(breeze_manager, 'last_error', '') or None,
                         'probe': getattr(breeze_manager, 'last_probe', None)})
