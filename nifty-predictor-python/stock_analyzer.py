@@ -10,8 +10,13 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
+import threading
 
 from stock_universe import NIFTY50_STOCKS, get_all_symbols
+
+
+class StockScanInProgress(Exception):
+    """A stock scan is already running; retry instead of duplicating it."""
 
 
 class StockAnalyzer:
@@ -20,7 +25,8 @@ class StockAnalyzer:
     def __init__(self):
         self.cache = {}
         self.cache_time = {}
-        self.cache_duration = 60  # 60 seconds cache
+        self.cache_duration = 300  # a full universe scan is expensive
+        self._scan_lock = threading.Lock()
         
     def _is_cache_valid(self, key: str) -> bool:
         if key not in self.cache_time:
@@ -235,36 +241,33 @@ class StockAnalyzer:
             return None
     
     def analyze_all_stocks(self) -> List[Dict]:
-        """Analyze all NIFTY50 stocks in parallel"""
+        """Run at most one NIFTY50 scan per process; don't block other workers."""
         cache_key = 'all_stocks_analysis'
-        
         if self._is_cache_valid(cache_key):
             return self.cache[cache_key]
-        
-        results = []
-        
-        # Use thread pool for parallel fetching
-        with ThreadPoolExecutor(max_workers=10) as executor:
-            futures = {
-                executor.submit(self.analyze_stock, code, info): code 
-                for code, info in NIFTY50_STOCKS.items()
-            }
-            
-            for future in as_completed(futures):
-                code = futures[future]
-                try:
-                    result = future.result()
-                    if result:
-                        results.append(result)
-                except Exception as e:
-                    print(f"Error processing {code}: {e}")
-        
-        # Cache results
-        self.cache[cache_key] = results
-        self.cache_time[cache_key] = time.time()
-        
-        return results
-    
+        if not self._scan_lock.acquire(blocking=False):
+            raise StockScanInProgress('Stock scan in progress; retry shortly')
+        try:
+            if self._is_cache_valid(cache_key):
+                return self.cache[cache_key]
+            results = []
+            with ThreadPoolExecutor(max_workers=4) as executor:
+                futures = {executor.submit(self.analyze_stock, code, info): code
+                           for code, info in NIFTY50_STOCKS.items()}
+                for future in as_completed(futures):
+                    try:
+                        result = future.result()
+                        if result:
+                            results.append(result)
+                    except Exception as e:
+                        print(f"Error processing {futures[future]}: {e}")
+            self.cache[cache_key] = results
+            # Retry failures sooner; keep successful scans for five minutes.
+            self.cache_time[cache_key] = time.time() if results else time.time() - (self.cache_duration - 60)
+            return results
+        finally:
+            self._scan_lock.release()
+
     def get_top_short_term_picks(self, count: int = 10) -> List[Dict]:
         """Get top stocks for short-term (15-min) trading"""
         all_stocks = self.analyze_all_stocks()

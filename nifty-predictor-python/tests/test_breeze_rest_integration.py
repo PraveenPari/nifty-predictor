@@ -162,6 +162,20 @@ assert breeze_manager.breeze_manager.last_probe['ltp'] == 123
         env = dict(os.environ, BREEZE_SESSION_TOKEN='')
         subprocess.run([sys.executable, '-c', script], env=env, check=True, capture_output=True, timeout=10)
 
+    def test_option_chain_discovery_respects_soft_budget(self):
+        class SlowEmptyClient:
+            def __init__(self): self.calls = 0
+            def get_quotes(self, **kwargs):
+                return {'Success': [{'ltp': 100, 'high': 100, 'low': 100}]}
+            def get_option_chain_quotes(self, **kwargs):
+                self.calls += 1
+                return {'Success': []}
+        manager = BreezeManager()
+        manager.connected, manager.breeze = True, SlowEmptyClient()
+        with patch('breeze_manager.time.monotonic', side_effect=[100, 101, 116]):
+            self.assertIsNone(manager.get_option_chain('nifty'))
+        self.assertEqual(manager.breeze.calls, 1)
+
     def test_option_chain_maps_string_strikes_and_iso_expiry(self):
         class FakeClient:
             def get_quotes(self, **kwargs):

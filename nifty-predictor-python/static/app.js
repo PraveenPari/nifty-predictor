@@ -59,8 +59,6 @@ function initApp() {
     safeBoot('chart', initChart);
     safeBoot('socket', initWebSocket);
     safeBoot('data', loadInitialData);
-    safeBoot('picks', loadStockPicks);
-    safeBoot('movers', loadMarketMovers);
     safeBoot('loops', startDataUpdates);
     safeBoot('clock', startClock);
 }
@@ -346,122 +344,84 @@ function updateConnectionStatus(text, isConnected) {
 
 // ============================================
 
+async function fetchDashboardJSON(url) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 45000);
+    try {
+        const response = await fetch(url, {signal: controller.signal});
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return await response.json();
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
 async function loadInitialData() {
-
-    console.log(`DEBUG: Loading data for index: ${currentIndex}`);
-
-    await Promise.all([
-
-        loadAnalysis(),
-
-        loadCandles(),
-
-        loadOptionChain(),
-
-        loadMLStats(),
-
-        loadRecentTrades()
-
-    ]);
-
+    // Avoid starting multiple expensive stock scans and option-chain searches
+    // simultaneously with the first chart and analysis request.
+    await Promise.all([loadAnalysis(), loadCandles()]);
 }
 
-
-
-async function loadAnalysis() {
-
-    try {
-
-        const response = await fetch(`${API_BASE}/api/analysis?index=${currentIndex}`);
-
-        const data = await response.json();
-
-        console.log(`DEBUG: Analysis received for ${currentIndex}:`, data);
-
-        updateFullAnalysis(data);
-
-    } catch (error) {
-
-        console.error('Failed to load analysis:', error);
-
-    }
-
-}
-
-
-
-async function loadCandles() {
-
-    try {
-
-        const response = await fetch(`${API_BASE}/api/candles?index=${currentIndex}&tf=${currentTimeframe}`);
-
-        const data = await response.json();
-
-        if (window.updateChart) {
-
-            window.updateChart(data.candles);
-
+function loadAnalysis() {
+    return window.RefreshControl.singleFlight('analysis', async () => {
+        const index = currentIndex;
+        try {
+            const data = await fetchDashboardJSON(`${API_BASE}/api/analysis?index=${index}`);
+            if (index === currentIndex) updateFullAnalysis(data);
+        } catch (error) {
+            console.error('Failed to load analysis:', error);
+            if (index === currentIndex) {
+                const badge = document.getElementById('dataSource');
+                if (badge) badge.textContent = 'FEED UNAVAILABLE';
+                const panel = document.getElementById('tradeSuggestionsPanel');
+                if (panel && !allStrategies.length) panel.textContent = 'Analysis unavailable — retrying shortly.';
+            }
         }
-
-    } catch (error) {
-
-        console.error('Failed to load candles:', error);
-
-    }
-
+    });
 }
 
-
-
-async function loadOptionChain() {
-
-    try {
-
-        const response = await fetch(`${API_BASE}/api/option-chain?index=${currentIndex}`);
-
-        const data = await response.json();
-
-        updateOptionChain(data);
-
-    } catch (error) {
-
-        console.error('Failed to load option chain:', error);
-
-    }
-
+function loadCandles() {
+    return window.RefreshControl.singleFlight('candles', async () => {
+        const index = currentIndex, timeframe = currentTimeframe;
+        try {
+            const data = await fetchDashboardJSON(`${API_BASE}/api/candles?index=${index}&tf=${timeframe}`);
+            if (index === currentIndex && timeframe === currentTimeframe && window.updateChart) {
+                window.updateChart(data.candles);
+            }
+        } catch (error) {
+            console.error('Failed to load candles:', error);
+            const loader = document.getElementById('chartLoader');
+            if (loader && index === currentIndex && timeframe === currentTimeframe) {
+                loader.textContent = 'Chart data unavailable — retrying shortly.';
+                loader.classList.remove('hide');
+            }
+        }
+    });
 }
 
-
+function loadOptionChain() {
+    return window.RefreshControl.singleFlight('option-chain', async () => {
+        const index = currentIndex;
+        try {
+            const data = await fetchDashboardJSON(`${API_BASE}/api/option-chain?index=${index}`);
+            if (index === currentIndex) updateOptionChain(data);
+        } catch (error) {
+            console.error('Failed to load option chain:', error);
+        }
+    });
+}
 
 function startDataUpdates() {
-
-    // Update analysis every 2 seconds
-
-    setInterval(loadAnalysis, 2000);
-
-
-
-    // Update candles every 5 seconds
-
-    setInterval(loadCandles, 5000);
-
-
-
-    // Update option chain every 10 seconds
-
-    setInterval(loadOptionChain, 10000);
-
-    
-
-    // Update ML stats every 15 seconds
-
-    setInterval(loadMLStats, 15000);
-
-    // Auto-update recent trades every 5s
-
-    setInterval(loadRecentTrades, 15000);
-
+    // Schedule after the previous request completes, not on a fixed interval.
+    // The socket price broadcaster continues independently.
+    const poll = window.RefreshControl.schedule;
+    poll(loadAnalysis, 15000);
+    poll(loadCandles, 30000);
+    poll(loadOptionChain, 60000, 8000);
+    poll(loadMLStats, 30000, 12000);
+    poll(loadRecentTrades, 60000, 18000);
+    poll(loadStockPicks, 60000, 35000);
+    poll(loadMarketMovers, 180000, 45000);
 }
 
 
@@ -624,6 +584,10 @@ function updateFullAnalysis(data) {
 
     // Demo-mode badge (simulated feed — never trade on it)
     const srcBadge = document.getElementById('dataSource');
+    if (srcBadge && !data.demo_mode) {
+        const source = (data.price_data && data.price_data.source) || 'FEED';
+        srcBadge.textContent = source + (data.analysis_cached ? ` · analysis ${data.analysis_age_seconds}s old` : '');
+    }
     if (srcBadge && data.demo_mode) {
         srcBadge.textContent = 'DEMO FEED';
         srcBadge.style.background = 'var(--warning-color, #f59e0b)';
@@ -1586,12 +1550,15 @@ window.loadNiftyTrades = async function() {
     const hoursSelect = document.getElementById('niftyTradesHours');
     const hours = hoursSelect ? hoursSelect.value : 4;
     try {
-        const response = await fetch(`${API_BASE}/api/recent-trades?index=nifty&hours=${hours}`);
-        const data = await response.json();
+        const data = await fetchDashboardJSON(`${API_BASE}/api/recent-trades?index=nifty&hours=${hours}`);
         window.currentNiftyTrades = data.trades || [];
         renderTradesSection(data, 'nifty');
     } catch (err) {
         console.error('Failed to load Nifty recent trades:', err);
+        const source = document.getElementById('niftyTradesSource');
+        if (source) source.textContent = 'Signal feed unavailable — displayed data may be stale.';
+        const body = document.getElementById('niftyTradesBody');
+        if (body && !window.currentNiftyTrades.length) body.innerHTML = '<tr><td colspan="10">Signal data unavailable — retrying.</td></tr>';
     }
 };
 
@@ -1599,12 +1566,15 @@ window.loadBankniftyTrades = async function() {
     const hoursSelect = document.getElementById('bankniftyTradesHours');
     const hours = hoursSelect ? hoursSelect.value : 4;
     try {
-        const response = await fetch(`${API_BASE}/api/recent-trades?index=banknifty&hours=${hours}`);
-        const data = await response.json();
+        const data = await fetchDashboardJSON(`${API_BASE}/api/recent-trades?index=banknifty&hours=${hours}`);
         window.currentBankniftyTrades = data.trades || [];
         renderTradesSection(data, 'banknifty');
     } catch (err) {
         console.error('Failed to load BankNifty recent trades:', err);
+        const source = document.getElementById('bankniftyTradesSource');
+        if (source) source.textContent = 'Signal feed unavailable — displayed data may be stale.';
+        const body = document.getElementById('bankniftyTradesBody');
+        if (body && !window.currentBankniftyTrades.length) body.innerHTML = '<tr><td colspan="10">Signal data unavailable — retrying.</td></tr>';
     }
 };
 
@@ -1959,9 +1929,10 @@ window.selectIndex = function (index) {
 
 
 
-    // Reload ALL data for new index
+    // Refresh the active index without allowing old responses to overwrite it.
 
     loadInitialData();
+    loadOptionChain();
 
 
 
@@ -2208,9 +2179,10 @@ async function loadStockPicks() {
 
     console.log("DEBUG: Loading stock picks...");
 
-    loadShortTermPicks();
-
-    loadLongTermPicks();
+    return window.RefreshControl.singleFlight('stock-picks', async () => {
+        await loadShortTermPicks();
+        await loadLongTermPicks();
+    });
 
 }
 
@@ -2228,9 +2200,7 @@ async function loadShortTermPicks() {
 
     try {
 
-        const response = await fetch(`${API_BASE}/api/top-stocks/short-term?count=10`);
-
-        const data = await response.json();
+        const data = await fetchDashboardJSON(`${API_BASE}/api/top-stocks/short-term?count=10`);
 
 
 
@@ -2274,9 +2244,7 @@ async function loadLongTermPicks() {
 
     try {
 
-        const response = await fetch(`${API_BASE}/api/top-stocks/long-term?count=10`);
-
-        const data = await response.json();
+        const data = await fetchDashboardJSON(`${API_BASE}/api/top-stocks/long-term?count=10`);
 
 
 
@@ -2366,9 +2334,7 @@ async function loadMarketMovers() {
 
     try {
 
-        const response = await fetch(`${API_BASE}/api/market-movers`);
-
-        const data = await response.json();
+        const data = await fetchDashboardJSON(`${API_BASE}/api/market-movers`);
 
 
 
@@ -2450,7 +2416,7 @@ function refreshStockPicks() {
 
 
 
-    Promise.all([loadShortTermPicks(), loadLongTermPicks(), loadMarketMovers()])
+    Promise.all([loadStockPicks(), loadMarketMovers()])
 
         .finally(() => {
 
@@ -2494,11 +2460,6 @@ function showStockDetail(code) {
 
 
 
-// Auto-refresh stock picks every 60 seconds
-
-setInterval(loadStockPicks, 60000);
-
-setInterval(loadMarketMovers, 120000);
 
 
 // ============================================
@@ -2721,8 +2682,8 @@ async function loadEliteSetup(manual) {
     if (!banner) return;
     if (manual && typeof toast === 'function') toast('Re-grading ' + idx.toUpperCase() + ' setup…');
     try {
-        const r = await fetch(`${API_BASE}/api/live-trade-setup?index=${idx}`);
-        const d = await r.json();
+        const d = await fetchDashboardJSON(`${API_BASE}/api/live-trade-setup?index=${idx}`);
+        if (idx !== currentIndex) return;
         if (d.error) throw new Error(d.error);
         const g = d.grade || {}, proj = d.projection || {}, lv = d.levels || {}, sz = d.sizing || {}, tav = d.ta_consensus || {};
         const gradeColors = { 'A+': '#f5c542', A: '#10b981', B: '#3b82f6', C: '#ef4444' };
@@ -2796,8 +2757,7 @@ async function loadMarketIntel() {
     const strip = document.getElementById('intelStrip');
     if (!strip) return;
     try {
-        const r = await fetch(`${API_BASE}/api/market-intel`);
-        const d = await r.json();
+        const d = await fetchDashboardJSON(`${API_BASE}/api/market-intel`);
         if ((d.gainers && d.gainers.length) || (d.losers && d.losers.length)) {
             if (d.gainers && d.gainers.length) window.renderMovers(d.gainers, 'topGainers', 'up');
             if (d.losers && d.losers.length) window.renderMovers(d.losers, 'topLosers', 'down');
@@ -2821,13 +2781,6 @@ async function loadMarketIntel() {
 (function eliteBoot() {
     const boot = () => {
         try {
-            if (typeof safeBoot === 'function') {
-                safeBoot('elite', loadEliteSetup);
-                safeBoot('intel', loadMarketIntel);
-            } else {
-                loadEliteSetup();
-                loadMarketIntel();
-            }
             document.querySelectorAll('.trades-card .card-head h3').forEach(h => {
                 if (!h.querySelector('.row-hint')) {
                     const s = document.createElement('span');
@@ -2843,13 +2796,13 @@ async function loadMarketIntel() {
     } else {
         boot();
     }
-    setInterval(() => { try { loadEliteSetup(); } catch (e) { /* noop */ } }, 90000);
-    setInterval(() => { try { loadMarketIntel(); } catch (e) { /* noop */ } }, 120000);
+    window.RefreshControl.schedule(() => window.RefreshControl.singleFlight('elite', loadEliteSetup), 90000, 25000);
+    window.RefreshControl.schedule(loadMarketIntel, 180000, 50000);
     if (window.selectIndex && !window.selectIndex._eliteWrapped) {
         const origSelect = window.selectIndex;
         window.selectIndex = function (index) {
             origSelect(index);
-            try { loadEliteSetup(); } catch (e) { /* noop */ }
+            try { window.RefreshControl.singleFlight('elite', loadEliteSetup); } catch (e) { /* noop */ }
         };
         window.selectIndex._eliteWrapped = true;
     }

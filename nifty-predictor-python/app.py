@@ -181,7 +181,7 @@ except Exception as e:
 # Optional: stock picks + market movers
 try:
     from stock_analyzer import (  # noqa: E402
-        get_short_term_picks, get_long_term_picks, get_all_analysis, get_market_overview,
+        get_short_term_picks, get_long_term_picks, get_all_analysis, get_market_overview, StockScanInProgress,
     )
     STOCKS_AVAILABLE = True
 except Exception as e:
@@ -423,7 +423,7 @@ def get_vix_hybrid():
     return {'ltp': 14, 'source': 'default'}
 
 
-def get_market_analysis(index='nifty'):
+def _compute_market_analysis(index='nifty'):
     """Complete market analysis with hybrid data sources."""
     index = _norm_index(index)
     price_data = get_live_price_hybrid(index)
@@ -579,6 +579,40 @@ def get_market_analysis(index='nifty'):
 # ---------------------------------------------------------------------------
 # Routes — pages & health
 # ---------------------------------------------------------------------------
+
+# Multiple dashboard panels request the same expensive analysis. Compute once
+# per index at a time, with a short, explicitly marked cache rather than
+# flooding a small web worker with duplicated upstream requests.
+_ANALYSIS_CACHE = {}
+_ANALYSIS_LOCKS = {'nifty': threading.Lock(), 'banknifty': threading.Lock()}
+_ANALYSIS_TTL = 15
+_ANALYSIS_MAX_STALE = 45
+
+
+def get_market_analysis(index='nifty'):
+    index = _norm_index(index)
+    now = time.monotonic()
+    entry = _ANALYSIS_CACHE.get(index)
+    if entry and now - entry[0] < _ANALYSIS_TTL:
+        return {**entry[1], 'analysis_cached': True, 'analysis_age_seconds': round(now - entry[0], 1)}
+    lock = _ANALYSIS_LOCKS[index]
+    if not lock.acquire(blocking=False):
+        if entry and now - entry[0] < _ANALYSIS_MAX_STALE:
+            return {**entry[1], 'analysis_cached': True, 'analysis_age_seconds': round(now - entry[0], 1)}
+        return {'error': 'ANALYSIS_BUSY', 'message': 'Analysis is refreshing; retry shortly.'}
+    try:
+        # Re-check after acquiring the lock in case another request just finished.
+        now = time.monotonic()
+        entry = _ANALYSIS_CACHE.get(index)
+        if entry and now - entry[0] < _ANALYSIS_TTL:
+            return {**entry[1], 'analysis_cached': True, 'analysis_age_seconds': round(now - entry[0], 1)}
+        result = _compute_market_analysis(index)
+        if 'error' not in result:
+            _ANALYSIS_CACHE[index] = (time.monotonic(), result)
+        return result
+    finally:
+        lock.release()
+
 
 @app.route('/')
 def index():
@@ -1242,6 +1276,12 @@ def live_trade_setup():
 # ---------------------------------------------------------------------------
 # Error handlers
 # ---------------------------------------------------------------------------
+
+if STOCKS_AVAILABLE:
+    @app.errorhandler(StockScanInProgress)
+    def stock_scan_busy(_error):
+        return jsonify({'error': 'STOCK_SCAN_IN_PROGRESS', 'message': 'Stock scan is running; retry shortly.'}), 503
+
 
 @app.errorhandler(404)
 def not_found(_e):

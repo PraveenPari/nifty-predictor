@@ -187,7 +187,13 @@ class BreezeManager:
             chain_data = []
             used_expiry = ""
 
+            # Limit repeated expiry probes; a single socket call still has its
+            # own timeout and can run beyond this soft budget.
+            deadline = time.monotonic() + 15
             for expiry_str in expiries_to_try:
+                if time.monotonic() >= deadline:
+                    print("[BREEZE] Option-chain discovery budget exhausted.")
+                    break
                 try:
                     oc_calls = self.breeze.get_option_chain_quotes(
                         stock_code=sym['stock_code'], exchange_code='NFO',
@@ -195,6 +201,8 @@ class BreezeManager:
                         right='call', strike_price='')
                     if not oc_calls or not oc_calls.get('Success'):
                         continue
+                    if time.monotonic() >= deadline:
+                        break
                     oc_puts = self.breeze.get_option_chain_quotes(
                         stock_code=sym['stock_code'], exchange_code='NFO',
                         product_type='options', expiry_date=expiry_str,
@@ -253,14 +261,8 @@ class BreezeManager:
                     'source': 'Breeze'
                 }
             else:
-                 print(f"DEBUG: All expiries failed for {index_key}. Trying Yahoo Fallback...")
-                 # Yahoo Fallback
-                 try:
-                     from yahoo_manager import yahoo_manager
-                     return yahoo_manager.get_option_chain(index)
-                 except Exception as ey:
-                     print(f"Yahoo Fallback Failed: {ey}")
-                     
+                print(f"[BREEZE] No option chain for {index_key}; hybrid fallback may be used.")
+
         except Exception as e:
             print(f"Breeze option chain error: {e}")
             import traceback
