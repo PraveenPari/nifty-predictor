@@ -15,6 +15,7 @@ import os
 import threading
 import time
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from flask import Flask, render_template, jsonify, request
 from flask_socketio import SocketIO
@@ -262,7 +263,7 @@ _YAHOO_PERIOD = {'5m': '5d', '15m': '5d', '1h': '1mo', '1d': '3mo'}
 # ---------------------------------------------------------------------------
 
 def is_market_open():
-    now = datetime.now()
+    now = datetime.now(ZoneInfo("Asia/Kolkata"))
     if now.weekday() >= 5:
         return False
     time_min = now.hour * 60 + now.minute
@@ -333,27 +334,38 @@ def get_live_price_hybrid(index: str):
     return None
 
 
-def get_candles_hybrid(index: str, tf: str = '5m', days: int = 5):
-    """Candles: Breeze -> Angel One -> Yahoo (or Demo Simulator in DEMO_MODE)."""
+def get_candles_with_source(index: str, tf: str = '5m', days: int = 5, min_candles: int = 5):
+    """Return candles and their actual provider; never infer source from connection status."""
     index = _norm_index(index)
     if DEMO_MODE and SIM_AVAILABLE:
         try:
-            return _demo_candles(index)
+            candles = _demo_candles(index)
+            if len(candles) >= min_candles:
+                return candles, 'Demo Simulator'
         except Exception as e:
             print(f"[DEMO] candles failed: {e}")
-    candles = None
     if BREEZE_AVAILABLE and breeze_manager.is_connected():
         candles = breeze_manager.get_historical_data(index, _BREEZE_TF.get(tf, '5minute'), days)
-    if (not candles or len(candles) < 5) and ANGEL_AVAILABLE and angel_one_enhanced.is_logged_in:
+        if candles and len(candles) >= min_candles:
+            return candles, 'Breeze'
+    if ANGEL_AVAILABLE and angel_one_enhanced.is_logged_in:
         tf_map = {'5m': 'FIVE_MINUTE', '15m': 'FIFTEEN_MINUTE', '1h': 'ONE_HOUR', '1d': 'ONE_DAY'}
         candles = angel_one_enhanced.get_candles(index, tf_map.get(tf, 'FIVE_MINUTE'), days=days)
-    if (not candles or len(candles) < 5) and YAHOO_AVAILABLE and not _breaker_skip('yahoo_candles'):
-        candles = yahoo_manager.get_candles(index, tf, _YAHOO_PERIOD.get(tf, '5d'))
-        if candles and len(candles) >= 5:
+        if candles and len(candles) >= min_candles:
+            return candles, 'Angel One'
+    if YAHOO_AVAILABLE and not _breaker_skip('yahoo_candles'):
+        period = ('5d' if days <= 5 else '1mo' if days <= 30 else '60d') if tf in ('5m', '15m') else _YAHOO_PERIOD.get(tf, '5d')
+        candles = yahoo_manager.get_candles(index, tf, period)
+        if candles and len(candles) >= min_candles:
             _breaker_ok('yahoo_candles')
-        else:
-            _breaker_fail('yahoo_candles')
-    return candles or []
+            return candles, 'Yahoo Finance'
+        _breaker_fail('yahoo_candles')
+    return [], None
+
+
+def get_candles_hybrid(index: str, tf: str = '5m', days: int = 5):
+    """Compatibility wrapper for consumers that only need the candles."""
+    return get_candles_with_source(index, tf, days)[0]
 
 
 def get_option_chain_hybrid(index: str):
@@ -424,7 +436,7 @@ def get_market_analysis(index='nifty'):
         }
 
     try:
-        candles = get_candles_hybrid(index, '5m', 5)
+        candles, candle_source = get_candles_with_source(index, '5m', 5)
         if not candles or len(candles) < 5:
             return {
                 'error': 'NO_CANDLE_DATA',
@@ -504,7 +516,11 @@ def get_market_analysis(index='nifty'):
             option_rec = pro_trader.calculate_option_recommendation(
                 index, ltp, direction, option_chain_data, 30)
             forward_prediction = pro_trader.predict_direction_15min(candles, indicators, ml_prediction)
-            backtest = pro_trader.backtest_strategy(candles, 'momentum')
+            if len(candles) >= 20:
+                backtest = pro_trader.backtest_strategy(candles, 'momentum')
+            else:
+                backtest = {'disabled': True, 'reason': 'Need at least 20 candles'}
+            backtest.update({'data_source': candle_source, 'strategy': 'SMA crossover', 'simulated': True})
             rr_ratio = rr.get('ratio', 0)
             suggested_lots = lot_calc.get('suggested_lots', 1)
             max_loss = lot_calc.get('max_loss', 0)
@@ -743,7 +759,7 @@ def backtest():
         days = max(1, min(60, int(request.args.get('days', 30))))
     except ValueError:
         days = 30
-    candles = get_candles_hybrid(index, '5m', days)
+    candles, candle_source = get_candles_with_source(index, '5m', days, min_candles=20)
     if not candles or len(candles) < 20:
         return jsonify({'error': 'INSUFFICIENT_DATA',
                         'message': 'Need at least 20 candles for backtest'}), 503
@@ -755,7 +771,11 @@ def backtest():
         'index': index,
         'backtest': result,
         'candles_used': len(candles),
-        'data_source': 'breeze' if (BREEZE_AVAILABLE and breeze_manager.is_connected()) else 'yahoo',
+        'data_source': candle_source,
+        'strategy': 'SMA crossover',
+        'simulated': True,
+        'first_candle': candles[0].get('time', candles[0].get('datetime', candles[0].get('timestamp'))),
+        'last_candle': candles[-1].get('time', candles[-1].get('datetime', candles[-1].get('timestamp'))),
         'timestamp': datetime.now().isoformat()
     })
 
@@ -949,16 +969,18 @@ def trade_history():
 
 @app.route('/api/recent-trades')
 def recent_trades():
-    """Trade signals from the last few hours with real outcomes and win rate."""
+    """Simulated historical signals, not broker-executed trades."""
     index = request.args.get('index', 'nifty')
     try:
         hours = max(1, min(24, int(request.args.get('hours', 5))))
     except ValueError:
         hours = 5
-    candles = get_candles_hybrid(index, '5m', 1)
-    if not candles or len(candles) < 10:
+    candles, source = get_candles_with_source(index, '5m', 1, min_candles=15)
+    if not candles:
         return jsonify({'error': 'INSUFFICIENT_DATA'}), 503
-    return jsonify(analyze_recent_trades(candles, index, hours))
+    result = analyze_recent_trades(candles, index, hours)
+    result.update({'data_source': source, 'simulated': True})
+    return jsonify(result)
 
 
 # ---------------------------------------------------------------------------

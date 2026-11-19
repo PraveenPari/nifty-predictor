@@ -280,7 +280,7 @@
                 <!-- ── RECENT TRADES: NIFTY ── -->
                 <div class="card trades-card">
                     <div class="card-head split">
-                        <h3><span class="head-icon nifty">◉</span> NIFTY 50 · TRACK RECORD</h3>
+                        <h3><span class="head-icon nifty">◉</span> NIFTY 50 · SIMULATED SIGNALS</h3>
                         <div class="window-picker">
                             <label>Window</label>
                             <select id="niftyTradesHours" onchange="loadNiftyTrades()">
@@ -290,6 +290,7 @@
                             </select>
                         </div>
                     </div>
+                    <div id="niftyTradesSource" class="picks-description">Simulated signals · candles: loading · times IST</div>
                     <div class="trades-summary-bar">
                         <div class="metric-card"><label>WIN RATE</label><span id="niftyWinRate">—</span></div>
                         <div class="metric-card"><label>TRADES</label><span id="niftyTotalTrades">—</span></div>
@@ -300,7 +301,7 @@
                     </div>
                     <div class="table-scroll">
                         <table class="trades-table">
-                            <thead><tr><th>Time</th><th>Action</th><th>Entry</th><th>Target</th><th>Stop</th><th>Exit/LTP</th><th>Points</th><th>P&amp;L ₹</th><th>Status</th><th>Trigger</th></tr></thead>
+                            <thead><tr><th>Time (IST)</th><th>Action</th><th>Entry</th><th>Target</th><th>Stop</th><th>Exit/LTP</th><th>Points</th><th>P&amp;L ₹</th><th>Status</th><th>Trigger</th></tr></thead>
                             <tbody id="niftyTradesBody"><tr><td colspan="10" class="muted-center">Loading NIFTY track record…</td></tr></tbody>
                         </table>
                     </div>
@@ -309,7 +310,7 @@
                 <!-- ── RECENT TRADES: BANKNIFTY ── -->
                 <div class="card trades-card">
                     <div class="card-head split">
-                        <h3><span class="head-icon bn">◉</span> BANK NIFTY · TRACK RECORD</h3>
+                        <h3><span class="head-icon bn">◉</span> BANK NIFTY · SIMULATED SIGNALS</h3>
                         <div class="window-picker">
                             <label>Window</label>
                             <select id="bankniftyTradesHours" onchange="loadBankniftyTrades()">
@@ -319,6 +320,7 @@
                             </select>
                         </div>
                     </div>
+                    <div id="bankniftyTradesSource" class="picks-description">Simulated signals · candles: loading · times IST</div>
                     <div class="trades-summary-bar">
                         <div class="metric-card"><label>WIN RATE</label><span id="bnWinRate">—</span></div>
                         <div class="metric-card"><label>TRADES</label><span id="bnTotalTrades">—</span></div>
@@ -329,7 +331,7 @@
                     </div>
                     <div class="table-scroll">
                         <table class="trades-table">
-                            <thead><tr><th>Time</th><th>Action</th><th>Entry</th><th>Target</th><th>Stop</th><th>Exit/LTP</th><th>Points</th><th>P&amp;L ₹</th><th>Status</th><th>Trigger</th></tr></thead>
+                            <thead><tr><th>Time (IST)</th><th>Action</th><th>Entry</th><th>Target</th><th>Stop</th><th>Exit/LTP</th><th>Points</th><th>P&amp;L ₹</th><th>Status</th><th>Trigger</th></tr></thead>
                             <tbody id="bankniftyTradesBody"><tr><td colspan="10" class="muted-center">Loading BANKNIFTY track record…</td></tr></tbody>
                         </table>
                     </div>
@@ -513,6 +515,7 @@
 
     <div class="toast" id="toast"></div>
 
-    <script src="/static/app.js?v=3.1"></script>
+    <script src="/static/js/market-time.js?v=1"></script>
+    <script src="/static/app.js?v=3.2"></script>
 </body>
 </html>

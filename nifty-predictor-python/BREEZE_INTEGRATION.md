@@ -13,3 +13,9 @@ Run offline contract tests from this directory:
 ```sh
 python -m unittest discover -s tests -p 'test_breeze_rest_integration.py' -v
 ```
+
+## Backtests and trade time
+
+The dashboard backtest uses the first provider that supplies at least 20 candles: Breeze, then Angel One, then Yahoo Finance (or demo data when demo mode is enabled). The source label is based on the actual candles, not connection status. The current simulation is a simple five-versus-ten-candle SMA crossover on index prices; it is not a broker tradebook or a test of actual options fills, fees or slippage. `/api/backtest` reports the provider, candle count and first/last candle.
+
+The recent-signals panels likewise simulate entries and outcomes from candles; they do not show real orders from the user's Breeze account. The public dashboard has no account login, so exposing broker tradebook details here would reveal private financial data. A protected account/authentication design is needed before adding that feature. Candle timestamps with explicit offsets or epoch values are converted to Asia/Kolkata; timezone-less Breeze candle times are treated as exchange-local.

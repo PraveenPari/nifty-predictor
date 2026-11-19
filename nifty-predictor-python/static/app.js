@@ -169,8 +169,10 @@ function initChart() {
                 secondsVisible: false,
 
                 borderColor: 'rgba(148, 163, 184, 0.2)',
+                tickMarkFormatter: window.MarketTime.formatChartTick,
 
             },
+            localization: { timeFormatter: window.MarketTime.formatChennaiTime },
 
             rightPriceScale: {
 
@@ -1340,6 +1342,13 @@ function updateBacktestInfo(backtest) {
 
 
 
+    if (backtest.disabled) {
+        const message = document.createElement('div');
+        message.id = 'backtestInfo';
+        message.textContent = `Simulated backtest unavailable: ${backtest.reason || 'insufficient data or engine unavailable'}`;
+        mlStats.appendChild(message);
+        return;
+    }
     const winColor = backtest.win_rate > 50 ? 'var(--up-color)' : 'var(--down-color)';
 
 
@@ -1348,7 +1357,7 @@ function updateBacktestInfo(backtest) {
 
         <div id="backtestInfo" style="margin-top: 12px; padding: 10px; background: rgba(139, 92, 246, 0.1); border-radius: 8px;">
 
-            <div style="font-size: 0.8em; color: var(--text-secondary);">${currentIndex.toUpperCase()} BACKTEST (${backtest.backtest_period || 'N/A'}):</div>
+            <div style="font-size: 0.8em; color: var(--text-secondary);">${currentIndex.toUpperCase()} SIMULATED BACKTEST (${backtest.backtest_period || 'N/A'}) · ${backtest.data_source || 'source unavailable'} · SMA crossover:</div>
 
             <div style="display: flex; justify-content: space-between; margin-top: 4px;">
 
@@ -1475,51 +1484,7 @@ window.createMainSeries = function () {
 
 
 window.parseCandleTime = function(t) {
-
-    if (typeof t === 'number') {
-
-        return t > 1e11 ? Math.floor(t / 1000) : Math.floor(t);
-
-    }
-
-    if (typeof t === 'string') {
-
-        let clean = t.trim().replace(' ', 'T');
-
-        if (!clean.includes('Z') && !clean.includes('+')) {
-
-            clean += '+05:30';
-
-        }
-
-        const ms = Date.parse(clean);
-
-        if (!isNaN(ms)) {
-
-            return Math.floor(ms / 1000);
-
-        }
-
-        const parts = t.split(/[- :T]/);
-
-        if (parts.length >= 3) {
-
-            const y = parseInt(parts[0]), m = parseInt(parts[1]) - 1, d = parseInt(parts[2]);
-
-            const hh = parts[3] ? parseInt(parts[3]) : 0;
-
-            const mm = parts[4] ? parseInt(parts[4]) : 0;
-
-            const ss = parts[5] ? parseInt(parts[5]) : 0;
-
-            return Math.floor(new Date(y, m, d, hh, mm, ss).getTime() / 1000);
-
-        }
-
-    }
-
-    return Math.floor(Date.now() / 1000);
-
+    return window.MarketTime.toEpochSeconds(t);
 };
 
 
@@ -1654,6 +1619,8 @@ function renderTradesSection(data, prefix) {
     if (!data || !data.summary) return;
     const s = data.summary;
     const trades = data.trades || [];
+    const sourceEl = document.getElementById(prefix + 'TradesSource');
+    if (sourceEl) sourceEl.textContent = `Simulated signals · candles: ${data.data_source || 'unavailable'} · times IST` ;
 
     const isBn = prefix === 'banknifty';
     const wrEl    = document.getElementById(isBn ? 'bnWinRate' : 'niftyWinRate');
@@ -1671,7 +1638,7 @@ function renderTradesSection(data, prefix) {
                            s.win_rate >= 45 ? 'var(--text-warning, #f59e0b)' : 'var(--down-color)';
     }
     if (ttEl) {
-        const activeNote = s.active ? ` <span style="font-size:0.7rem;color:var(--accent-blue);">(${s.active} live)</span>` : '';
+        const activeNote = s.active ? ` <span style="font-size:0.7rem;color:var(--accent-blue);">(${s.active} open)</span>` : '';
         ttEl.innerHTML = `${s.wins + s.losses}${activeNote}`;
     }
     if (wlEl) wlEl.textContent = `${s.wins}W - ${s.losses}L`;
@@ -1718,7 +1685,7 @@ function renderTradesSection(data, prefix) {
                             isLoss   ? '#ef4444'  :
                             isActive ? '#3b82f6'  : '#888';
         const statusLabel = isActive
-            ? '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#3b82f6;animation:pulse 1.2s infinite;margin-right:4px;vertical-align:middle;"></span>LIVE'
+            ? '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#3b82f6;animation:pulse 1.2s infinite;margin-right:4px;vertical-align:middle;"></span>OPEN'
             : t.result;
 
         const actionColor = t.direction === 'BULLISH' ? '#10b981' : '#ef4444';
@@ -1726,10 +1693,8 @@ function renderTradesSection(data, prefix) {
         const pnlPrefix   = t.pnl_per_lot > 0 ? '+' : '';
         const ptsPrefix   = t.points > 0 ? '+' : '';
 
-        // format time as HH:MM
-        let timeDisplay = t.time || '';
-        if (timeDisplay.includes(' '))      timeDisplay = timeDisplay.split(' ')[1].substring(0, 5);
-        else if (timeDisplay.includes('T')) timeDisplay = timeDisplay.split('T')[1].substring(0, 5);
+        // Display the actual candle timestamp in Chennai, regardless of browser zone.
+        const timeDisplay = window.MarketTime.formatChennaiTime(t.time);
 
         const ptsColor = t.points >= 0 ? '#10b981' : '#ef4444';
         const pnlColor = t.pnl_per_lot >= 0 ? '#10b981' : '#ef4444';
@@ -1795,7 +1760,7 @@ window.showTradeDetails = function(prefix, idx) {
     }
 
     if (title) {
-        title.innerHTML = `${prefix.toUpperCase()} Order Audit &bull; <span style="font-weight:400;color:#888;">${t.time}</span>`;
+        title.textContent = `${prefix.toUpperCase()} Simulated Signal · ${window.MarketTime.formatChennaiTime(t.time)}`;
     }
 
     const rsiVal = ind.rsi !== null && ind.rsi !== undefined ? ind.rsi : 'N/A';
@@ -1826,7 +1791,7 @@ window.showTradeDetails = function(prefix, idx) {
         </div>
 
         <!-- Order Levels Grid -->
-        <h4 style="margin:0 0 10px 0; font-size:0.82rem; color:#888; text-transform:uppercase; letter-spacing:0.5px;">Executed Order Parameters</h4>
+        <h4 style="margin:0 0 10px 0; font-size:0.82rem; color:#888; text-transform:uppercase; letter-spacing:0.5px;">Simulated Signal Parameters</h4>
         <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:10px; margin-bottom:20px;">
             <div style="background:#1e222d; padding:10px; border-radius:6px; border:1px solid #2a2e39;">
                 <div style="font-size:0.72rem; color:#888;">Entry Fill</div>
@@ -2552,7 +2517,8 @@ function eliteTheme() {
             vertLines: { color: 'rgba(148, 163, 184, 0.07)' },
             horzLines: { color: 'rgba(148, 163, 184, 0.07)' },
         },
-        timeScale: { timeVisible: true, secondsVisible: false, borderColor: 'rgba(148, 163, 184, 0.2)' },
+        timeScale: { timeVisible: true, secondsVisible: false, borderColor: 'rgba(148, 163, 184, 0.2)', tickMarkFormatter: window.MarketTime.formatChartTick },
+        localization: { timeFormatter: window.MarketTime.formatChennaiTime },
         rightPriceScale: { borderColor: 'rgba(148, 163, 184, 0.2)' },
         crosshair: {
             mode: window.LightweightCharts.CrosshairMode.Normal,
@@ -2928,12 +2894,12 @@ async function refreshBreezeStatus() {
         const configured = !!(d.breeze_key_ready || d.breeze_configured);
         breezeConnectedCache = connected;
         if (dot) dot.className = 'breeze-dot ' + (connected ? 'on' : (configured ? '' : 'idle'));
-        if (txt) txt.textContent = connected ? 'Breeze ● LIVE' : (configured ? 'Connect Breeze' : 'Breeze: no key');
+        if (txt) txt.textContent = connected ? 'Breeze ● Connected' : (configured ? 'Connect Breeze' : 'Breeze: no key');
         if (btn) btn.classList.toggle('live', connected);
         const mStatus = document.getElementById('breezeModalStatus');
         if (mStatus) {
             mStatus.innerHTML = connected
-                ? 'Status: <b class="on">● CONNECTED</b> — live broker feed active for today.'
+                ? 'Status: <b class="on">● CONNECTED</b> — quote availability depends on Breeze.'
                 : (configured
                     ? 'Status: <b class="off">● DISCONNECTED</b> — paste today\'s token below.'
                     : 'Status: <b class="off">● NO API KEY</b> — set BREEZE_API_KEY in Render Environment first.');
@@ -3026,7 +2992,7 @@ window.breezeSubmitToken = async function () {
         const d = await readJsonSafe(r);
         if (d.success) {
             if (msg) {
-                const quote = d.probe && d.probe.ltp ? (' — NIFTY ₹' + Number(d.probe.ltp).toLocaleString('en-IN') + (d.probe.last_trade_time ? ' · last trade ' + d.probe.last_trade_time : '')) : '';
+                const quote = d.probe && d.probe.ltp ? (' — NIFTY ₹' + Number(d.probe.ltp).toLocaleString('en-IN') + (d.probe.last_trade_time ? ' · last trade ' + window.MarketTime.formatChennaiTime(d.probe.last_trade_time) : '')) : '';
                 msg.textContent = d.warning ? ('Login accepted, but quote not verified: ' + d.warning) : ('✓ Breeze quote received' + quote);
                 msg.className = d.warning ? 'breeze-msg err' : 'breeze-msg ok';
             }
