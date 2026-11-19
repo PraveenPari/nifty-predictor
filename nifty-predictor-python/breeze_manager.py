@@ -100,10 +100,12 @@ class BreezeManager:
                 if self.breeze is client:
                     self.connected = False
                     self.session_token = None
+                    self.last_error_code = 'BREEZE_AUTH_REJECTED'
+                    self.last_error = 'Breeze session expired or invalid; update server secrets and restart.'
                     self.last_probe = None
                     self.cache.clear()
                     self.cache_time.clear()
-            print("[BREEZE] Session invalid or expired; reconnect.")
+            print("[BREEZE] Session invalid or expired; update the session secret and restart.")
             return None
         except (BreezeError, ValueError, TypeError, KeyError, IndexError) as e:
             print(f"[BREEZE] Quote unavailable ({type(e).__name__}); using fallback.")
@@ -304,7 +306,7 @@ class BreezeManager:
         """Authenticate with the documented customer-details API; probe a fresh quote.
 
         Credentials and the resulting session remain in process memory only.
-        A restart or worker replacement requires a fresh Connect.
+        At startup, the token is read from the server secret environment.
         """
         with self.auth_lock:
             self.last_error = ''
@@ -362,14 +364,24 @@ class BreezeManager:
 # Singleton instance
 breeze_manager = BreezeManager()
 
-# Auto-initialize with session token from .env if available
+# Auto-connect from the hosting environment (or a local ignored .env file).
+# Never print token contents; a missing or rejected token leaves fallbacks active.
 if BREEZE_SESSION_TOKEN:
-    print(f"[BREEZE] Found session token in .env, attempting auto-connect...")
-    if breeze_manager.set_session_token(BREEZE_SESSION_TOKEN):
-        print("[BREEZE] Auto-connected successfully!")
-    else:
-        print(f"[BREEZE] Auto-connect failed: {breeze_manager.last_error or 'unknown reason'}. "
-              "Login via /api/breeze-login-url")
+    print("[BREEZE] Session secret present; attempting auto-connect.")
+    try:
+        if breeze_manager.set_session_token(BREEZE_SESSION_TOKEN):
+            if breeze_manager.last_probe:
+                print("[BREEZE] Auto-connect authenticated; startup quote received.")
+            else:
+                print("[BREEZE] Auto-connect authenticated; startup quote unavailable.")
+        else:
+            print(f"[BREEZE] Auto-connect failed ({breeze_manager.last_error_code}). Check Render secrets and the ICICI session.")
+    except Exception as exc:
+        breeze_manager.connected = False
+        breeze_manager.last_error_code = 'BREEZE_UNAVAILABLE'
+        breeze_manager.last_error = 'Breeze auto-connect failed unexpectedly.'
+        print(f"[BREEZE] Auto-connect failed unexpectedly ({type(exc).__name__}).")
 else:
-    print("[BREEZE] No session token in .env. Set BREEZE_SESSION_TOKEN or login via /api/breeze-login-url")
-
+    breeze_manager.last_error_code = 'BREEZE_TOKEN_MISSING'
+    breeze_manager.last_error = 'Set BREEZE_SESSION_TOKEN in server secrets and restart.'
+    print("[BREEZE] Session token missing. Set BREEZE_SESSION_TOKEN in server secrets and restart.")

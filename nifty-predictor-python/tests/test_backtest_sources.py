@@ -32,6 +32,15 @@ class BacktestSourceTests(unittest.TestCase):
         self.addCleanup(self.skip.stop)
         self.http = app.app.test_client()
 
+    def test_status_is_safe_and_dashboard_token_endpoint_removed(self):
+        status = self.http.get('/api/status').get_json()
+        self.assertIn('breeze_connected', status)
+        self.assertIn('breeze_startup_quote', status)
+        self.assertIn('breeze_session_configured', status)
+        self.assertNotIn('BREEZE_SESSION_TOKEN', str(status))
+        self.assertEqual(self.http.post('/api/breeze-auth', json={'token': 'dummy'}).status_code, 404)
+        self.assertEqual(self.http.get('/api/breeze-login-url').status_code, 404)
+
     @patch.object(app.yahoo_manager, 'get_candles')
     @patch.object(app.breeze_manager, 'get_historical_data')
     def test_backtest_uses_and_reports_breeze(self, breeze, yahoo):

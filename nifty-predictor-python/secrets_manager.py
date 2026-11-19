@@ -113,7 +113,7 @@ def breeze_setup_help() -> str:
     return (
         "Breeze is not configured. Set these secrets and restart:\n"
         "  1. BREEZE_API_KEY + BREEZE_SECRET_KEY (from ICICI Direct developer portal)\n"
-        "  2. Open the login URL from /api/breeze-login-url, log in, copy the "
+        "  2. Log in to ICICI Breeze, copy the "
         "session token from the redirect URL\n"
         "  3. Set BREEZE_SESSION_TOKEN to that token (it expires daily — "
         "refresh every trading morning)\n"

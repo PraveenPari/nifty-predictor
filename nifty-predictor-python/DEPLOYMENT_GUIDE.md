@@ -32,11 +32,11 @@ the host — no custom domain purchase needed.
 4. Deploy. Your app is live at `https://nifty-predictor.onrender.com`.
 5. Verify: open `https://<your-app>.onrender.com/healthz` → `{"status":"ok"}`.
 
-**Daily Breeze token refresh:** session tokens expire every day. Each trading
-morning, open `https://<your-app>.onrender.com/api/breeze-login-url`, log in
-to ICICI, copy `apisession` from the redirect URL, and update the
-`BREEZE_SESSION_TOKEN` env var (service redeploys automatically — or use
-`POST /api/breeze-auth {"token": "..."}` for zero-downtime refresh).
+**Breeze token refresh:** obtain a fresh `apisession` using ICICI's Breeze
+login, update `BREEZE_SESSION_TOKEN` in Render → Environment and save/redeploy.
+The server connects automatically on startup. Check `/api/status` for
+`breeze_connected` and `breeze_startup_quote`; a connected session alone
+does not guarantee a current quote. Do not paste the token into chat or code.
 
 **Cold starts:** free services sleep after ~15 min idle; first visit takes
 ~60s to wake. A free cron ping (e.g. UptimeRobot hitting `/healthz` every

@@ -32,11 +32,10 @@ secrets_manager.py  (single choke point: reads env, validates, masks)
 - `secrets_manager.get_secret()` returns `""` for missing **or placeholder**
   values (`your_breeze_api_key`, `changeme`, …).
 - Nothing ever prints a secret: logging uses `mask()` → `1L99****445`.
-- `/api/status` and `/api/healthz` expose only `connected: true/false`.
+- `/api/status` and `/healthz` never expose credential values. Status can include non-secret connection flags and the startup market quote.
 - Missing Breeze secrets ⇒ Breeze features disable cleanly and the app falls
   back to Yahoo Finance. Nothing crashes.
-- Breeze session tokens expire daily. When expired, the API returns a
-  `BREEZE_AUTH_EXPIRED` payload with re-auth instructions instead of a 500.
+- Breeze session tokens expire. When expired, update the token in server secrets and redeploy; status reports a safe error code.
 
 ## Local development
 

@@ -32,6 +32,6 @@ TIMEOUT = 30  # seconds
 if not BREEZE_API_KEY or not BREEZE_SECRET_KEY:
     print("[SECRETS] Set BREEZE_API_KEY and BREEZE_SECRET_KEY to enable Breeze.")
 elif not BREEZE_SESSION_TOKEN:
-    print("[SECRETS] Breeze keys configured; connect a session in the dashboard.")
+    print("[SECRETS] Breeze keys configured; set BREEZE_SESSION_TOKEN in server secrets for auto-connect.")
 else:
     print(f"[SECRETS] Breeze configured (key {mask(BREEZE_API_KEY)}).")

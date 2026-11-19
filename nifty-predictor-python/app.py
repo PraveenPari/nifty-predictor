@@ -213,7 +213,7 @@ except Exception as e:  # pragma: no cover
     print(f"[WARN] trade_setup_engine unavailable: {e}")
     SETUP_ENGINE_AVAILABLE = False
     TA_AVAILABLE = False
-from secrets_manager import breeze_login_url, safe_status  # noqa: E402
+from secrets_manager import safe_status  # noqa: E402
 
 # Optional: market simulator (powers DEMO_MODE)
 try:
@@ -619,6 +619,9 @@ def status():
         'breeze_connected': bool(BREEZE_AVAILABLE and breeze_manager.is_connected()),
         'breeze_configured': breeze.get('fully_configured', False),
         'breeze_key_ready': breeze.get('login_url_ready', False),
+        'breeze_session_configured': breeze.get('session_token_set', False),
+        'breeze_error_code': getattr(breeze_manager, 'last_error_code', '') if BREEZE_AVAILABLE else 'BREEZE_UNAVAILABLE',
+        'breeze_startup_quote': getattr(breeze_manager, 'last_probe', None) if BREEZE_AVAILABLE else None,
         'market_open': is_market_open(),
         'demo_mode': DEMO_MODE,
         'yahoo_available': YAHOO_AVAILABLE,
@@ -802,50 +805,6 @@ def train_ml():
         import traceback
         traceback.print_exc()
         return jsonify({'success': False, 'message': str(e)}), 500
-
-
-# ---------------------------------------------------------------------------
-# Routes — Breeze auth (secrets stay server-side)
-# ---------------------------------------------------------------------------
-
-@app.route('/api/breeze-login-url')
-def breeze_login_url_route():
-    url = breeze_login_url()
-    if not url:
-        return jsonify({
-            'error': 'BREEZE_NOT_CONFIGURED',
-            'message': 'Set BREEZE_API_KEY secret first. See SECURITY.md.'
-        }), 503
-    return jsonify({'url': url})
-
-
-@app.route('/api/breeze-auth', methods=['POST'])
-def breeze_auth():
-    payload = request.get_json(silent=True) or {}
-    token = (payload.get('token') or '').strip()
-    if not token:
-        return jsonify({'success': False, 'message': 'Missing session token'}), 400
-    if not BREEZE_AVAILABLE:
-        return jsonify({'success': False, 'message': 'Breeze integration unavailable on server'}), 503
-    try:
-        authed = breeze_manager.set_session_token(token)
-    except Exception as e:  # last-resort guard: always JSON, never a dead worker
-        print(f"[BREEZE] /api/breeze-auth guard caught: {type(e).__name__}")
-        return jsonify({'success': False,
-                        'message': 'Breeze authentication failed unexpectedly.',
-                        'code': 'BREEZE_AUTH_ERROR'}), 500
-    if authed:
-        return jsonify({'success': True,
-                        'warning': getattr(breeze_manager, 'last_error', '') or None,
-                        'probe': getattr(breeze_manager, 'last_probe', None)})
-    code = getattr(breeze_manager, 'last_error_code', '') or 'BREEZE_AUTH_ERROR'
-    status = 400 if code == 'BREEZE_TOKEN_MISSING' else 401 if code == 'BREEZE_AUTH_REJECTED' else 503
-    return jsonify({
-        'success': False,
-        'message': getattr(breeze_manager, 'last_error', '') or 'Breeze authentication failed.',
-        'login_url': breeze_login_url(),
-        'code': code
-    }), status
 
 
 # ---------------------------------------------------------------------------

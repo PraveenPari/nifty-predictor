@@ -135,6 +135,28 @@ class BreezeTests(unittest.TestCase):
         with patch.dict(os.environ, {'BREEZE_API_KEY': 'a+b/='}):
             self.assertEqual(breeze_login_url(), 'https://api.icicidirect.com/apiuser/login?api_key=a%2Bb%2F%3D')
 
+    def test_startup_connects_from_secrets_without_logging_token(self):
+        script = r"""
+import base64, json, requests
+class Response:
+    status_code = 200
+    def __init__(self, payload): self.payload = payload
+    def json(self): return self.payload
+session = base64.b64encode(b'fake-user:fake-session').decode()
+responses = iter([Response({'Status': 200, 'Success': {'session_token': session}}),
+                  Response({'Status': 200, 'Success': [{'ltp': '123', 'high': '124', 'low': '122'}]})])
+requests.get = lambda *a, **kw: next(responses)
+import breeze_manager
+assert breeze_manager.breeze_manager.connected
+assert breeze_manager.breeze_manager.last_probe['ltp'] == 123
+"""
+        env = dict(os.environ, BREEZE_API_KEY='fake-app-key', BREEZE_SECRET_KEY='fake-secret-key',
+                   BREEZE_SESSION_TOKEN='fake-daily-token')
+        result = subprocess.run([sys.executable, '-c', script], env=env, check=True,
+                                capture_output=True, text=True, timeout=10)
+        self.assertNotIn('fake-daily-token', result.stdout + result.stderr)
+        self.assertNotIn('fake-secret-key', result.stdout + result.stderr)
+
     def test_import_does_not_fetch_security_master(self):
         script = "import urllib.request; urllib.request.urlopen=lambda *a, **k: (_ for _ in ()).throw(RuntimeError('network during import')); import breeze_manager; assert 'breeze_connect' not in __import__('sys').modules"
         env = dict(os.environ, BREEZE_SESSION_TOKEN='')

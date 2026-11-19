@@ -14,7 +14,7 @@ print("="*60)
 breeze = BreezeConnect(api_key=BREEZE_API_KEY)
 SESSION_TOKEN = BREEZE_SESSION_TOKEN or ""
 if not SESSION_TOKEN:
-    print("Set BREEZE_SESSION_TOKEN first (daily token via /api/breeze-login-url).")
+    print("Set BREEZE_SESSION_TOKEN in server secrets first.")
     raise SystemExit(1)
 
 print(f"\n[1] Authenticating...")
